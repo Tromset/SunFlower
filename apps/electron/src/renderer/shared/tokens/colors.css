@@ -1,7 +1,8 @@
 /* ──────────────────────────────────────────────────────────
    Colors — CycladesAI
-   A warm, editorial palette: chaude cream paper, near-black
+   A warm, editorial palette: warm cream paper, near-black
    warm ink, and the Claude clay-orange accent (#D97757).
+   Dark surfaces get the sunflower-yellow accent (#FCD232).
    No cool grays, no blues. Everything leans warm.
    ────────────────────────────────────────────────────────── */
 :root {
@@ -18,6 +19,10 @@
   --orange:       #D97757;   /* primary accent — clay */
   --orange-deep:  #C4623F;   /* hover / pressed accent */
   --orange-tint:  #F6E3D7;   /* faint accent wash, icon plates */
+
+  --yellow:       #FCD232;   /* sunflower petals — accent on dark surfaces */
+  --yellow-deep:  #E3B91F;   /* hover / pressed yellow */
+  --yellow-tint:  rgba(252, 210, 50, 0.12); /* faint yellow wash on ink */
 
   /* ---- Semantic surfaces ---- */
   --surface-page:     var(--cream);
@@ -44,6 +49,7 @@
   --border-soft:     var(--cream-2);
   --border-on-dark:  rgba(254, 249, 237, 0.12);
   --border-accent:   rgba(217, 119, 87, 0.28);
+  --border-yellow:   rgba(252, 210, 50, 0.28);
 
   /* ---- Selection ---- */
   --selection-bg: var(--orange);

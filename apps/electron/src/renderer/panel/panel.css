@@ -1,4 +1,4 @@
-/* Panneau de la barre de menus — prototype 1b, au pixel. */
+/* Menu-bar panel — prototype 1b, pixel-perfect. */
 html,
 body {
   height: 100%;
@@ -187,7 +187,7 @@ header {
   white-space: nowrap;
 }
 .badge.ok {
-  color: #fcd232;
+  color: var(--yellow);
   background: rgba(252, 210, 50, 0.1);
   border: 1px solid rgba(252, 210, 50, 0.25);
 }

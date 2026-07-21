@@ -1,4 +1,4 @@
-/* Le compagnon : tournesol près du curseur + bulle de réponse (prototype 1a/1d). */
+/* The companion: sunflower near the cursor + answer bubble (prototype 1a/1d). */
 html,
 body {
   height: 100%;
@@ -55,7 +55,7 @@ body.flip #row {
   display: inline-block;
   width: 7px;
   height: 13px;
-  background: #fcd232;
+  background: var(--yellow);
   margin-left: 4px;
   vertical-align: -2px;
   animation: sfCaret 1s steps(1) infinite;

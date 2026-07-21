@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <link rel="stylesheet" href="../shared/tokens/fonts.css" />
@@ -19,7 +19,7 @@
         </div>
         <div class="live">
           <span id="live-dot"></span>
-          <span id="live-label">actif</span>
+          <span id="live-label">active</span>
         </div>
       </header>
       <div class="divider"></div>
@@ -27,17 +27,17 @@
       <div class="shortcut">
         <span class="chip">⌃</span>
         <span class="chip">⌥</span>
-        <span class="hint">maintenez pour parler.</span>
+        <span class="hint">hold to talk.</span>
       </div>
 
       <div class="tabs">
-        <button id="tab-accueil" class="tab active" type="button">
-          accueil
+        <button id="tab-home" class="tab active" type="button">
+          home
         </button>
         <button id="tab-agents" class="tab" type="button">agents</button>
       </div>
 
-      <section id="view-accueil">
+      <section id="view-home">
         <div class="section">
           <span class="section-label">permissions</span>
           <div class="perm-row" data-perm="microphone">
@@ -45,49 +45,49 @@
             <span class="perm-status"></span>
           </div>
           <div class="perm-row" data-perm="accessibility">
-            <span class="perm-name">accessibilité</span>
+            <span class="perm-name">accessibility</span>
             <span class="perm-status"></span>
           </div>
           <div class="perm-row" data-perm="screen">
-            <span class="perm-name">enregistrement d'écran</span>
+            <span class="perm-name">screen recording</span>
             <span class="perm-status"></span>
           </div>
           <div class="perm-row" data-perm="screenContent">
-            <span class="perm-name">contenu d'écran</span>
+            <span class="perm-name">screen content</span>
             <span class="perm-status"></span>
           </div>
         </div>
 
         <div class="section">
-          <span class="section-label">modèle</span>
+          <span class="section-label">model</span>
           <div class="model-box">
             <div class="model-info">
               <span id="model-name" class="model-title">qwen3-vl:8b</span>
-              <span class="model-sub">vision · outils · via ollama</span>
+              <span class="model-sub">vision · tools · via ollama</span>
             </div>
-            <span id="model-badge" class="badge">[--] hors ligne</span>
+            <span id="model-badge" class="badge">[--] offline</span>
           </div>
           <div class="model-box" id="voice-box">
             <div class="model-info">
-              <span class="model-title">voix locale</span>
+              <span class="model-title">local voice</span>
               <span id="voice-sub" class="model-sub">whisper · small</span>
             </div>
-            <span id="voice-badge" class="badge">[..] chargement</span>
+            <span id="voice-badge" class="badge">[..] loading</span>
           </div>
         </div>
       </section>
 
       <section id="view-agents" hidden>
         <p class="agents-empty">
-          les agents arrivent bientôt — vos apps connectées, pilotées à la
-          voix, sans quitter la maison.
+          agents are coming soon — your connected apps, driven by voice,
+          without anything leaving home.
         </p>
       </section>
 
       <div class="divider footer-divider"></div>
       <footer>
-        <button id="quit" type="button">quitter sunflower</button>
-        <span class="version">v0.1 · 100 % local</span>
+        <button id="quit" type="button">quit sunflower</button>
+        <span class="version">v0.1 · 100% local</span>
       </footer>
     </div>
     <script src="./panel.js"></script>

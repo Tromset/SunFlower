@@ -1,5 +1,5 @@
-// Stub du bridge pour ouvrir les surfaces dans un simple navigateur
-// (développement/design). Dans Electron, le preload fournit le vrai bridge.
+// Bridge stub to open the surfaces in a plain browser (development/design).
+// In Electron, the preload provides the real bridge.
 import type { SunflowerBridge } from "../../shared/ipc";
 import type { PanelData } from "../../shared/state";
 
@@ -34,7 +34,7 @@ export function ensureBridge(): void {
       listeners.set(name, list);
       return () => {};
     };
-  // Console de dev : __sfDev.emit("state", {island:"ecoute", pose:"ecoute"})
+  // Dev console: __sfDev.emit("state", {island:"listening", pose:"listening"})
   (window as unknown as Record<string, unknown>)["__sfDev"] = {
     emit(name: string, ...args: unknown[]) {
       for (const cb of listeners.get(name) ?? []) {

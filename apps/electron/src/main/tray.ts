@@ -33,7 +33,7 @@ export function createTray(opts: {
   tray.on("right-click", () => {
     tray!.popUpContextMenu(
       Menu.buildFromTemplate([
-        { label: "quitter sunflower", click: opts.onQuit },
+        { label: "quit sunflower", click: opts.onQuit },
       ]),
     );
   });

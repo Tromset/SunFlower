@@ -1,7 +1,7 @@
-// Îlot : rendu des états + capture micro (AudioWorklet 16 kHz mono).
+// Island: state rendering + mic capture (16 kHz mono AudioWorklet).
 import { ensureBridge } from "../shared/dev-stub";
 import {
-  ISLAND_ECOUTE,
+  ISLAND_LISTENING,
   POSES,
   pixelArtSvg,
   type PixelArt,
@@ -17,25 +17,25 @@ const waveEl = document.getElementById("wave")!;
 const waveBars = Array.from(waveEl.querySelectorAll("span"));
 
 const LABELS: Partial<Record<IslandState, string>> = {
-  ecoute: "je vous écoute…",
-  lecture: "je regarde votre écran…",
-  reflexion: "je réfléchis…",
-  reponse: "je vous réponds…",
+  listening: "listening…",
+  reading: "looking at your screen…",
+  thinking: "thinking…",
+  answering: "answering…",
 };
 
 const ICONS: Record<IslandState, PixelArt> = {
-  veille: POSES.veille,
-  ecoute: ISLAND_ECOUTE,
-  lecture: POSES.lecture,
-  reflexion: POSES.veille,
-  action: POSES.veille,
-  reponse: POSES.reponse,
-  erreur: POSES.veille,
+  idle: POSES.idle,
+  listening: ISLAND_LISTENING,
+  reading: POSES.reading,
+  thinking: POSES.idle,
+  acting: POSES.idle,
+  answering: POSES.answering,
+  error: POSES.idle,
 };
 
 function iconSize(art: PixelArt): [number, number] {
   const [vw, vh] = art.vb;
-  const scale = 18 / 9; // hauteur 18px comme le prototype 1a
+  const scale = 18 / 9; // 18px tall, as in prototype 1a
   return [Math.round(vw * scale), Math.round(vh * scale)];
 }
 
@@ -45,19 +45,19 @@ function render(payload: StatePayload): void {
   const art = ICONS[state];
   const [w, h] = iconSize(art);
   iconEl.innerHTML = pixelArtSvg(art, w, h);
-  if (state === "erreur") {
+  if (state === "error") {
     labelEl.innerHTML = `<span class="warn">[!!]</span> ${escapeHtml(
-      payload.message ?? "quelque chose s'est mal passé.",
+      payload.message ?? "something went wrong.",
     )}`;
-  } else if (state === "action") {
-    labelEl.textContent = `[->] ${payload.message ?? "un agent travaille…"}`;
+  } else if (state === "acting") {
+    labelEl.textContent = `[->] ${payload.message ?? "an agent is working…"}`;
   } else {
     labelEl.textContent = LABELS[state] ?? "";
   }
-  // Onde : animation CSS en réponse et en début d'écoute ; dès que le micro
-  // envoie un niveau réel, il prend la main (retrait de .anim).
-  waveEl.classList.toggle("anim", state === "reponse" || state === "ecoute");
-  if (state !== "ecoute") {
+  // Wave: CSS animation while answering and at the start of listening; as
+  // soon as the mic reports a real level, it takes over (.anim removed).
+  waveEl.classList.toggle("anim", state === "answering" || state === "listening");
+  if (state !== "listening") {
     for (const bar of waveBars) bar.style.transform = "";
   }
 }
@@ -66,7 +66,7 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
-// ---- Capture micro ------------------------------------------------------
+// ---- Mic capture --------------------------------------------------------
 const MAX_SECONDS = 60;
 
 interface Capture {
@@ -77,8 +77,8 @@ interface Capture {
   samples: number;
 }
 
-/** Identité de session : un mic-start/mic-stop rapproché ne doit ni fuir un
-    flux micro, ni envoyer l'audio d'une session annulée. */
+/** Session identity: a quick mic-start/mic-stop must neither leak a mic
+    stream nor send audio from a cancelled session. */
 let session = 0;
 let capture: Capture | null = null;
 let starting: Promise<void> | null = null;
@@ -100,7 +100,7 @@ async function startCapture(id: number): Promise<void> {
       },
     });
   } catch (err) {
-    console.error("getUserMedia :", err);
+    console.error("getUserMedia:", err);
     if (id === session) {
       window.sunflower.sendMicError(
         err instanceof DOMException && err.name === "NotAllowedError"
@@ -124,7 +124,7 @@ async function startCapture(id: number): Promise<void> {
     try {
       await ctx.audioWorklet.addModule("./capture-worklet.js");
     } catch {
-      // Repli : injection du worklet via une URL Blob.
+      // Fallback: inject the worklet through a Blob URL.
       const source = await fetch("./capture-worklet.js").then((r) => r.text());
       const url = URL.createObjectURL(
         new Blob([source], { type: "text/javascript" }),
@@ -133,7 +133,7 @@ async function startCapture(id: number): Promise<void> {
       URL.revokeObjectURL(url);
     }
   } catch (err) {
-    console.error("audioWorklet :", err);
+    console.error("audioWorklet:", err);
     discard(stream, ctx);
     if (id === session) window.sunflower.sendMicError("failed");
     return;
@@ -163,7 +163,7 @@ async function startCapture(id: number): Promise<void> {
 function pushRms(rms: number): void {
   rmsHistory.pop();
   rmsHistory.unshift(rms);
-  if (!island.className.includes("ecoute")) return;
+  if (!island.className.includes("listening")) return;
   waveEl.classList.remove("anim");
   waveBars.forEach((bar, i) => {
     const level = Math.min(1, (rmsHistory[i] ?? 0) * 9 + 0.25);
@@ -202,4 +202,4 @@ window.sunflower.onMicStop(() => {
   void stopCapture();
 });
 
-render({ island: "veille", pose: "veille" });
+render({ island: "idle", pose: "idle" });

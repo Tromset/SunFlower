@@ -1,4 +1,4 @@
-// Accueil en trois étapes : bienvenue → permissions → modèle.
+// Three-step welcome: welcome → permissions → model.
 import { ensureBridge } from "../shared/dev-stub";
 import { FIELD, POSES, pixelArtSvg } from "../../shared/sunflower-pixels";
 import type { PanelData, PermissionId } from "../../shared/state";
@@ -6,12 +6,12 @@ import type { PanelData, PermissionId } from "../../shared/state";
 ensureBridge();
 
 document.getElementById("welcome-flower")!.innerHTML = pixelArtSvg(
-  POSES.veille,
+  POSES.idle,
   44,
   50,
 );
 
-// Champ de tournesols du pied de page (tailles du prototype 1e).
+// Footer sunflower field (sizes from prototype 1e).
 const strip = document.getElementById("field-strip")!;
 strip.innerHTML = [16, 13, 16, 12, 16, 13]
   .map((w) => pixelArtSvg(FIELD, w, Math.round((w * 9) / 8)))
@@ -29,7 +29,7 @@ function showStep(index: number): void {
   current = index;
   steps.forEach((el, i) => (el.hidden = i !== index));
   dots.forEach((el, i) => el.classList.toggle("active", i === index));
-  nextLabel.textContent = index === 2 ? "commencer" : "continuer";
+  nextLabel.textContent = index === 2 ? "get started" : "continue";
 }
 
 nextBtn.addEventListener("click", () => {
@@ -37,7 +37,7 @@ nextBtn.addEventListener("click", () => {
   else void window.sunflower.onboardingDone();
 });
 
-// ---- permissions (étape 02) --------------------------------------------
+// ---- permissions (step 02) ---------------------------------------------
 for (const item of document.querySelectorAll<HTMLElement>(".perm-item")) {
   item.querySelector(".perm-action")!.addEventListener("click", () => {
     void window.sunflower.requestPermission(
@@ -46,7 +46,7 @@ for (const item of document.querySelectorAll<HTMLElement>(".perm-item")) {
   });
 }
 
-// ---- statuts vivants ----------------------------------------------------
+// ---- live status --------------------------------------------------------
 const checkOllama = document.getElementById("check-ollama")!;
 const checkModel = document.getElementById("check-model")!;
 const checkVoice = document.getElementById("check-voice")!;
@@ -67,7 +67,7 @@ function setCheck(item: HTMLElement, ok: boolean, badge: string): void {
 }
 
 function render(data: PanelData): void {
-  // étape 02
+  // step 02
   for (const item of document.querySelectorAll<HTMLElement>(".perm-item")) {
     const id = item.dataset["perm"] as PermissionId;
     const granted = data.permissions[id] === "granted";
@@ -76,25 +76,25 @@ function render(data: PanelData): void {
     if (granted && !existing) {
       const ok = document.createElement("span");
       ok.className = "perm-status-ok";
-      ok.textContent = "accordée";
+      ok.textContent = "granted";
       item.appendChild(ok);
     } else if (!granted && existing) {
       existing.remove();
     }
   }
-  // étape 03
+  // step 03
   setCheck(
     checkOllama,
     data.model.reachable,
-    data.model.reachable ? "[ok] joignable" : "[--] hors ligne",
+    data.model.reachable ? "[ok] reachable" : "[--] offline",
   );
   document.getElementById("check-model-name")!.textContent = data.model.name;
   document.getElementById("check-model-cmd")!.textContent =
-    `lancez : ollama pull ${data.model.name}`;
+    `run: ollama pull ${data.model.name}`;
   setCheck(
     checkModel,
     data.model.pulled,
-    data.model.pulled ? "[ok] présent" : "[--] absent",
+    data.model.pulled ? "[ok] present" : "[--] missing",
   );
   const stt = data.stt.status;
   voiceProgress.hidden = stt !== "downloading";
@@ -103,18 +103,18 @@ function render(data: PanelData): void {
   if (stt === "downloading") {
     const pct = data.stt.progress ?? 0;
     voiceProgressBar.style.width = `${pct}%`;
-    voiceDesc.textContent = `téléchargement en cours — ${pct} %`;
+    voiceDesc.textContent = `downloading — ${pct}%`;
     setCheck(checkVoice, false, "[..]");
   } else if (stt === "ready") {
-    voiceDesc.textContent = "prête — tout se passe sur votre Mac.";
-    setCheck(checkVoice, true, "[ok] prête");
+    voiceDesc.textContent = "ready — everything happens on your Mac.";
+    setCheck(checkVoice, true, "[ok] ready");
   } else if (stt === "loading") {
-    voiceDesc.textContent = "chargement du modèle de voix…";
+    voiceDesc.textContent = "loading the voice model…";
     setCheck(checkVoice, false, "[..]");
   } else if (stt === "absent") {
-    voiceDesc.textContent = "un téléchargement de ~190 Mo, une seule fois.";
+    voiceDesc.textContent = "a ~190 MB download, just once.";
   } else {
-    voiceDesc.textContent = data.stt.error ?? "voix indisponible.";
+    voiceDesc.textContent = data.stt.error ?? "voice unavailable.";
     setCheck(checkVoice, false, "[!!]");
   }
 }

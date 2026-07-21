@@ -72,12 +72,12 @@ async function resolveModel(): Promise<string> {
   return status.pulled ? status.name : getConfig().ollamaModel;
 }
 
-const SYSTEM_FR = [
-  "Tu es sunflower, un compagnon d'écran calme et discret qui tourne entièrement en local sur le Mac de l'utilisateur.",
-  "L'image jointe est son écran actuel ; sa question a été dictée à la voix, elle peut donc contenir de petites erreurs de transcription.",
-  "Réponds en français, en vouvoyant, en une à trois phrases courtes et chaleureuses. Pas de listes, pas d'emoji, pas de markdown, pas de code.",
-  "Si — et seulement si — montrer UN élément précis de l'écran aide vraiment, termine ta réponse par le marqueur exact [POINT:x%,y%] où x et y sont les coordonnées du centre de cet élément en pourcentage de la largeur et de la hauteur de l'écran.",
-  "Ne mentionne jamais ce marqueur ni des coordonnées dans ton texte.",
+const SYSTEM_PROMPT = [
+  "You are sunflower, a calm, unobtrusive screen companion that runs entirely locally on the user's Mac.",
+  "The attached image is their current screen; their question was dictated by voice, so it may contain small transcription errors.",
+  "Answer in English, in one to three short, warm sentences. No lists, no emoji, no markdown, no code.",
+  "If — and only if — pointing at ONE precise element on screen genuinely helps, end your answer with the exact marker [POINT:x%,y%] where x and y are the coordinates of that element's center as a percentage of the screen width and height.",
+  "Never mention this marker or any coordinates in your text.",
 ].join(" ");
 
 /** Supprime en flux les blocs <think>…</think> (défensif). */
@@ -158,7 +158,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
         keep_alive: "10m",
         options: { temperature: 0.4, num_predict: 300 },
         messages: [
-          { role: "system", content: SYSTEM_FR },
+          { role: "system", content: SYSTEM_PROMPT },
           {
             role: "user",
             content: opts.question,
@@ -169,11 +169,11 @@ export async function chat(opts: ChatOptions): Promise<string> {
     });
     if (res.status === 404) {
       throw new OllamaFailure(
-        `modèle absent — ollama pull ${model}`,
+        `model missing — ollama pull ${model}`,
       );
     }
     if (!res.ok || !res.body) {
-      throw new OllamaFailure(`ollama a répondu ${res.status}.`);
+      throw new OllamaFailure(`ollama responded ${res.status}.`);
     }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -213,11 +213,11 @@ export async function chat(opts: ChatOptions): Promise<string> {
     if (timedOut) {
       throw new OllamaFailure(
         full.length > 0
-          ? "le modèle s'est interrompu."
-          : "le modèle ne répond pas.",
+          ? "the model stopped mid-answer."
+          : "the model isn't responding.",
       );
     }
-    throw new OllamaFailure("ollama est introuvable — lancez ollama serve.");
+    throw new OllamaFailure("ollama can't be reached — run ollama serve.");
   } finally {
     if (watchdog) clearTimeout(watchdog);
     opts.signal.removeEventListener("abort", onExternalAbort);

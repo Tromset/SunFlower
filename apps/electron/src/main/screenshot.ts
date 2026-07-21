@@ -25,7 +25,7 @@ export async function captureScreenAtCursor(): Promise<Screenshot | null> {
       display,
     };
   } catch (err) {
-    console.error("[sunflower] capture d'écran impossible :", err);
+    console.error("[sunflower] screen capture failed:", err);
     return null;
   }
 }

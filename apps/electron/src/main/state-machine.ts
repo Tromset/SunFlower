@@ -1,6 +1,6 @@
-// Orchestrateur de session : idle → écoute → lecture → réflexion → réponse.
-// Un seul vol à la fois (sessionId monotone) ; toute continuation async
-// vérifie qu'elle n'est pas périmée avant d'agir.
+// Session orchestrator: idle → listening → reading → thinking → answering.
+// One flight at a time (monotonic sessionId); every async continuation
+// checks it is not stale before acting.
 import type { Display } from "electron";
 import type { AppPhase, StatePayload } from "../shared/state";
 import type { MicErrorCode } from "../shared/ipc";
@@ -49,7 +49,7 @@ const TTS_FAILSAFE_MS = 90_000;
 export function createSessionMachine(deps: MachineDeps): SessionMachine {
   let phase: AppPhase = "idle";
   let seq = 0;
-  /** Dernière session dont l'audio micro a déjà été consommé (one-shot). */
+  /** Last session whose mic audio was already consumed (one-shot). */
   let micSeen = -1;
   let abort: AbortController | null = null;
   let pressedAt = 0;
@@ -69,17 +69,17 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
   const toIdle = () => {
     phase = "idle";
     clearTimers();
-    deps.broadcast({ island: "veille", pose: "veille" });
+    deps.broadcast({ island: "idle", pose: "idle" });
   };
 
   const fail = (message: string) => {
     const id = ++seq;
     phase = "idle";
     clearTimers();
-    // La voix et le pointeur ne doivent jamais survivre à une erreur.
+    // Voice and pointer must never survive an error.
     deps.ttsStop();
     deps.hidePoint();
-    deps.broadcast({ island: "erreur", pose: "veille", message });
+    deps.broadcast({ island: "error", pose: "idle", message });
     errorTimer = setTimeout(() => {
       if (id === seq) toIdle();
     }, ERROR_MS);
@@ -101,25 +101,25 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
     const shot = await capturePromise;
     if (id !== seq) return;
     if (!shot) {
-      fail("la capture d'écran a échoué — vérifiez la permission.");
+      fail("screen capture failed — check the permission.");
       return;
     }
     let question: string;
     try {
       question = await deps.transcribe(pcm, sampleRate);
     } catch (err) {
-      console.error("[sunflower] transcription :", err);
-      if (id === seq) fail("la transcription a échoué.");
+      console.error("[sunflower] transcription:", err);
+      if (id === seq) fail("transcription failed.");
       return;
     }
     if (id !== seq) return;
     if (!question) {
-      fail("je n'ai rien entendu.");
+      fail("I didn't hear anything.");
       return;
     }
-    console.log(`[sunflower] question : ${question}`);
+    console.log(`[sunflower] question: ${question}`);
     phase = "thinking";
-    deps.broadcast({ island: "reflexion", pose: "reflexion" });
+    deps.broadcast({ island: "thinking", pose: "thinking" });
     deps.answerReset();
     abort = new AbortController();
     const parser = createPointParser({
@@ -129,11 +129,11 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
       onPoint: (point) => {
         if (id !== seq) return;
         deps.showPoint(point, shot.display);
-        deps.broadcast({ island: "reponse", pose: "pointage" });
+        deps.broadcast({ island: "answering", pose: "pointing" });
         if (pointPoseTimer) clearTimeout(pointPoseTimer);
         pointPoseTimer = setTimeout(() => {
           if (id === seq && phase === "responding") {
-            deps.broadcast({ island: "reponse", pose: "reponse" });
+            deps.broadcast({ island: "answering", pose: "answering" });
           }
         }, 4000);
       },
@@ -149,7 +149,7 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
           if (first) {
             first = false;
             phase = "responding";
-            deps.broadcast({ island: "reponse", pose: "reponse" });
+            deps.broadcast({ island: "answering", pose: "answering" });
           }
           parser.push(text);
         },
@@ -157,7 +157,7 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
       if (id !== seq) return;
       parser.flush();
       if (!full.trim()) {
-        fail("je n'ai pas trouvé quoi répondre.");
+        fail("I couldn't find anything to say.");
         return;
       }
       deps.answerDone(stripPointMarkers(full));
@@ -170,11 +170,11 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
       }, TTS_FAILSAFE_MS);
     } catch (err) {
       if (id !== seq || err instanceof OllamaUserInterrupt) return;
-      console.error("[sunflower] ollama :", err);
+      console.error("[sunflower] ollama:", err);
       fail(
         err instanceof OllamaFailure
           ? err.userMessage
-          : "quelque chose s'est mal passé.",
+          : "something went wrong.",
       );
     }
   };
@@ -185,13 +185,13 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
       seq++;
       if (phase === "listening") return;
       if (!deps.sttReady()) {
-        fail("voix indisponible — ouvrez le panneau sunflower.");
+        fail("voice unavailable — open the sunflower panel.");
         return;
       }
       clearTimers();
       phase = "listening";
       pressedAt = Date.now();
-      deps.broadcast({ island: "ecoute", pose: "ecoute" });
+      deps.broadcast({ island: "listening", pose: "listening" });
       deps.micStart();
     },
     hotkeyUp() {
@@ -205,24 +205,24 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
       if (!deps.screenGranted()) {
         seq++;
         deps.micStop();
-        fail("autorisez l'enregistrement d'écran dans le panneau sunflower.");
+        fail("allow screen recording in the sunflower panel.");
         return;
       }
-      // Capture immédiate : l'écran est encore dans l'état que l'utilisateur décrit.
+      // Capture immediately: the screen is still in the state the user describes.
       capturePromise = deps.capture();
       phase = "processing";
-      deps.broadcast({ island: "lecture", pose: "reflexion" });
+      deps.broadcast({ island: "reading", pose: "thinking" });
       deps.micStop();
       const id = seq;
       micTimer = setTimeout(() => {
         if (id === seq && phase === "processing") {
-          fail("le micro n'a rien envoyé.");
+          fail("the mic sent nothing.");
         }
       }, 10_000);
     },
     onMicData(pcm, sampleRate) {
-      // One-shot par session : un second micData (session annulée en retard,
-      // doublon) ne doit jamais lancer un second runSession avec le même seq.
+      // One-shot per session: a second micData (a late-cancelled session,
+      // a duplicate) must never launch a second runSession with the same seq.
       if (phase !== "processing" || micSeen === seq) return;
       micSeen = seq;
       if (micTimer) {
@@ -236,8 +236,8 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
       seq++;
       fail(
         code === "denied"
-          ? "autorisez le microphone dans le panneau sunflower."
-          : "le micro n'a pas répondu.",
+          ? "allow the microphone in the sunflower panel."
+          : "the mic didn't respond.",
       );
     },
     onTtsEnded() {

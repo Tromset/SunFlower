@@ -1,4 +1,4 @@
-// Panneau : statuts vivants (permissions, modèle, voix), onglets, quitter.
+// Panel: live status (permissions, model, voice), tabs, quit.
 import { ensureBridge } from "../shared/dev-stub";
 import { POSES, pixelArtSvg } from "../../shared/sunflower-pixels";
 import type { PanelData, PermissionId } from "../../shared/state";
@@ -6,7 +6,7 @@ import type { PanelData, PermissionId } from "../../shared/state";
 ensureBridge();
 
 document.getElementById("brand-icon")!.innerHTML = pixelArtSvg(
-  POSES.veille,
+  POSES.idle,
   15,
   17,
 );
@@ -27,7 +27,7 @@ function renderPermissions(data: PanelData): void {
     const granted = data.permissions[id] === "granted";
     row.classList.toggle("granted", granted);
     row.querySelector(".perm-status")!.innerHTML =
-      `<span class="dot"></span>${granted ? "accordée" : "à accorder"}`;
+      `<span class="dot"></span>${granted ? "granted" : "not granted"}`;
   }
 }
 
@@ -37,8 +37,8 @@ function renderModel(data: PanelData): void {
     modelBadge.className = `badge ${cls}`;
     modelBadge.textContent = text;
   };
-  if (!data.model.reachable) set("off", "[--] hors ligne");
-  else if (!data.model.pulled) set("warn", "[!!] à télécharger");
+  if (!data.model.reachable) set("off", "[--] offline");
+  else if (!data.model.pulled) set("warn", "[!!] to download");
   else set("ok", "[ok] local");
 }
 
@@ -55,27 +55,27 @@ function renderVoice(data: PanelData): void {
   };
   switch (data.stt.status) {
     case "ready":
-      set("ok", "[ok] locale");
+      set("ok", "[ok] local");
       break;
     case "downloading":
-      set("off", `[..] ${data.stt.progress ?? 0} %`);
+      set("off", `[..] ${data.stt.progress ?? 0}%`);
       break;
     case "loading":
-      set("off", "[..] chargement");
+      set("off", "[..] loading");
       break;
     case "absent":
-      set("warn", "[--] télécharger", true);
+      set("warn", "[--] download", true);
       break;
     default:
-      set("warn", "[!!] indisponible");
+      set("warn", "[!!] unavailable");
       if (data.stt.error) voiceBadge.title = data.stt.error;
   }
 }
 
 function render(data: PanelData): void {
   liveDot.classList.toggle("off", !data.hotkeyAvailable);
-  liveLabel.textContent = data.hotkeyAvailable ? "actif" : "en attente";
-  versionEl.textContent = `v${data.version.split(".").slice(0, 2).join(".")} · 100 % local`;
+  liveLabel.textContent = data.hotkeyAvailable ? "active" : "waiting";
+  versionEl.textContent = `v${data.version.split(".").slice(0, 2).join(".")} · 100% local`;
   renderPermissions(data);
   renderModel(data);
   renderVoice(data);
@@ -95,17 +95,17 @@ voiceBadge.addEventListener("click", () => {
   if (sttStatus === "absent") void window.sunflower.downloadWhisper();
 });
 
-const tabAccueil = document.getElementById("tab-accueil")!;
+const tabHome = document.getElementById("tab-home")!;
 const tabAgents = document.getElementById("tab-agents")!;
-const viewAccueil = document.getElementById("view-accueil")!;
+const viewHome = document.getElementById("view-home")!;
 const viewAgents = document.getElementById("view-agents")!;
 function selectTab(agents: boolean): void {
-  tabAccueil.classList.toggle("active", !agents);
+  tabHome.classList.toggle("active", !agents);
   tabAgents.classList.toggle("active", agents);
-  (viewAccueil as HTMLElement).hidden = agents;
+  (viewHome as HTMLElement).hidden = agents;
   (viewAgents as HTMLElement).hidden = !agents;
 }
-tabAccueil.addEventListener("click", () => selectTab(false));
+tabHome.addEventListener("click", () => selectTab(false));
 tabAgents.addEventListener("click", () => selectTab(true));
 
 document.getElementById("quit")!.addEventListener("click", () => {
