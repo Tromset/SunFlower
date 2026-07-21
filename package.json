@@ -11,7 +11,8 @@
     "build": "turbo build",
     "check-types": "turbo check-types",
     "dev:server": "turbo -F server dev",
-    "deploy:server": "turbo -F server deploy"
+    "deploy:server": "turbo -F server deploy",
+    "start": "pnpm --filter sunflower start"
   },
   "dependencies": {
     "dotenv": "catalog:",

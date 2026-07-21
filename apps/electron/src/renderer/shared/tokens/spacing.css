@@ -1,0 +1,33 @@
+/* ──────────────────────────────────────────────────────────
+   Spacing & radii — CycladesAI
+   Generous, airy editorial rhythm. Sections breathe (90–130px
+   vertical). Containers are narrow-ish and centered. Corners
+   are soft: large 28px cards, full pills for every button.
+   ────────────────────────────────────────────────────────── */
+:root {
+  /* ---- Spacing scale (4px base) ---- */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  26px;
+  --space-7:  32px;
+  --space-8:  40px;
+  --space-10: 56px;
+  --space-12: 72px;
+  --space-16: 110px;   /* section padding (vertical) */
+  --space-20: 130px;   /* big section padding */
+
+  /* ---- Layout ---- */
+  --container:       1140px;
+  --container-prose: 760px;   /* legal / FAQ / reading width */
+  --gutter:          28px;
+
+  /* ---- Radii ---- */
+  --r-sm:    12px;   /* small chips, icon plates */
+  --r-md:    16px;   /* nav bar, inputs */
+  --r-lg:    18px;   /* FAQ rows, small cards */
+  --r-card:  28px;   /* the signature soft card */
+  --r-pill:  999px;  /* every button & badge */
+}

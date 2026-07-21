@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../shared/tokens/fonts.css" />
+    <link rel="stylesheet" href="../shared/tokens/colors.css" />
+    <link rel="stylesheet" href="../shared/tokens/typography.css" />
+    <link rel="stylesheet" href="../shared/tokens/spacing.css" />
+    <link rel="stylesheet" href="../shared/tokens/effects.css" />
+    <link rel="stylesheet" href="../shared/base.css" />
+    <link rel="stylesheet" href="./onboarding.css" />
+  </head>
+  <body>
+    <div id="drag-strip"></div>
+
+    <!-- étape 01 · bienvenue (prototype 1e) -->
+    <section class="step" id="step-1">
+      <div class="center">
+        <div class="icon-plate"><span id="welcome-flower"></span></div>
+        <span class="kicker">compagnon d'écran · 100 % local</span>
+        <h2>Bienvenue dans <i>sunflower.</i></h2>
+        <p class="lead">
+          Maintenez ⌃ ⌥ n'importe où sur votre Mac pour parler. Sunflower
+          écoute, voit votre écran et répond à voix haute — le modèle tourne
+          chez vous, via Ollama. Rien ne quitte la maison.
+        </p>
+      </div>
+    </section>
+
+    <!-- étape 02 · permissions -->
+    <section class="step" id="step-2" hidden>
+      <div class="center left">
+        <span class="kicker">étape 02 / 03 · permissions</span>
+        <h2>Donnez-lui <i>les yeux et les oreilles.</i></h2>
+        <p class="lead">
+          Quatre autorisations macOS, rien de plus : écouter quand vous
+          maintenez ⌃ ⌥, et regarder l'écran que vous lui montrez. Tout reste
+          sur votre Mac.
+        </p>
+        <div class="perm-list">
+          <div class="perm-item" data-perm="microphone">
+            <div class="perm-text">
+              <span class="perm-title">microphone</span>
+              <span class="perm-desc">pour entendre votre question.</span>
+            </div>
+            <button class="perm-action" type="button">accorder</button>
+          </div>
+          <div class="perm-item" data-perm="accessibility">
+            <div class="perm-text">
+              <span class="perm-title">accessibilité</span>
+              <span class="perm-desc">pour capter ⌃ ⌥ partout.</span>
+            </div>
+            <button class="perm-action" type="button">accorder</button>
+          </div>
+          <div class="perm-item" data-perm="screen">
+            <div class="perm-text">
+              <span class="perm-title">enregistrement d'écran</span>
+              <span class="perm-desc">pour voir ce que vous décrivez.</span>
+            </div>
+            <button class="perm-action" type="button">accorder</button>
+          </div>
+          <div class="perm-item" data-perm="screenContent">
+            <div class="perm-text">
+              <span class="perm-title">contenu d'écran</span>
+              <span class="perm-desc">pour pointer le bon endroit.</span>
+            </div>
+            <button class="perm-action" type="button">accorder</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- étape 03 · le modèle -->
+    <section class="step" id="step-3" hidden>
+      <div class="center left">
+        <span class="kicker">étape 03 / 03 · le modèle</span>
+        <h2>Le modèle tourne <i>chez vous.</i></h2>
+        <p class="lead">
+          Sunflower parle à Ollama sur votre Mac et écoute avec Whisper en
+          local. Aucune clé, aucun compte, aucun serveur distant.
+        </p>
+        <div class="check-list">
+          <div class="check-item" id="check-ollama">
+            <div class="perm-text">
+              <span class="perm-title">ollama</span>
+              <span class="perm-desc mono">lancez : ollama serve</span>
+            </div>
+            <span class="check-badge">[--]</span>
+          </div>
+          <div class="check-item" id="check-model">
+            <div class="perm-text">
+              <span class="perm-title" id="check-model-name">qwen3-vl:8b</span>
+              <span class="perm-desc mono" id="check-model-cmd"
+                >lancez : ollama pull qwen3-vl:8b</span
+              >
+            </div>
+            <span class="check-badge">[--]</span>
+          </div>
+          <div class="check-item" id="check-voice">
+            <div class="perm-text">
+              <span class="perm-title">voix locale · whisper</span>
+              <span class="perm-desc" id="voice-desc"
+                >un téléchargement de ~190 Mo, une seule fois.</span
+              >
+            </div>
+            <button class="perm-action" id="voice-download" type="button">
+              télécharger
+            </button>
+            <span class="check-badge" id="voice-check" hidden>[--]</span>
+          </div>
+        </div>
+        <div class="progress" id="voice-progress" hidden>
+          <div class="progress-bar" id="voice-progress-bar"></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="field-strip" id="field-strip"></div>
+
+    <footer>
+      <div class="dots">
+        <span class="dot active"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+      </div>
+      <button class="btn" id="next" type="button">
+        <span id="next-label">continuer</span>
+        <span class="arrow">→</span>
+      </button>
+    </footer>
+    <script src="./onboarding.js"></script>
+  </body>
+</html>

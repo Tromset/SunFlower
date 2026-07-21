@@ -1,0 +1,62 @@
+/* ──────────────────────────────────────────────────────────
+   Typography — CycladesAI
+   One serif (Newsreader) carries the whole system. Headings are
+   large, light-ish (450/500), tightly tracked and frequently
+   set with an italic accent word in orange. Labels are small,
+   sentence/lowercase, lightly LETTER-spaced — never uppercase.
+   ────────────────────────────────────────────────────────── */
+:root {
+  /* ---- Weights (Newsreader ships 400 / 450 / 500) ---- */
+  --weight-regular:  400;
+  --weight-text:     450;   /* default heading weight — soft, editorial */
+  --weight-medium:   500;   /* nav logo, summaries, emphasis */
+
+  /* ---- Fluid display scale (hero / section titles) ---- */
+  --text-hero:     clamp(3rem, 8.4vw, 6.6rem);   /* full-bleed hero headline */
+  --text-display:  clamp(2.8rem, 7vw, 5.2rem);   /* big price / acronym */
+  --text-h1:       clamp(2rem, 4.6vw, 3.4rem);   /* section heading */
+  --text-h2:       clamp(1.6rem, 3vw, 2.3rem);   /* row / sub-section heading */
+  --text-h3:       1.35rem;                       /* card heading */
+  --text-quote:    clamp(1.7rem, 4.2vw, 2.9rem); /* manifesto / pull-quote */
+
+  /* ---- Body scale ---- */
+  --text-lead:     clamp(1.02rem, 1.7vw, 1.22rem); /* hero sub / lead paragraph */
+  --text-body-lg:  1.02rem;
+  --text-body:     0.98rem;
+  --text-body-sm:  0.95rem;
+
+  /* ---- Labels / meta / "mono" captions ---- */
+  --text-label:    0.8rem;   /* nav, buttons, kickers */
+  --text-meta:     0.72rem;  /* hero meta, card labels */
+  --text-fine:     0.68rem;  /* footer headings, badges, fine print */
+
+  /* ---- Line heights ---- */
+  --leading-tight:   1.02;   /* hero / display */
+  --leading-snug:    1.25;   /* quotes, large headings */
+  --leading-normal:  1.6;    /* body copy */
+  --leading-relaxed: 1.65;
+
+  /* ---- Tracking (always negative on display, slightly + on labels) ---- */
+  --tracking-hero:   -0.04em;
+  --tracking-head:   -0.03em;
+  --tracking-tight:  -0.02em;
+  --tracking-label:   0.02em;
+  --tracking-meta:    0.04em;
+  --tracking-wide:    0.06em;
+}
+
+/* Sensible element defaults — opt-in by linking this stylesheet. */
+body {
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: var(--leading-normal);
+  color: var(--text-body);
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: var(--weight-text);
+  color: var(--text-strong);
+  letter-spacing: var(--tracking-head);
+}
+em { font-style: italic; color: var(--text-accent); }

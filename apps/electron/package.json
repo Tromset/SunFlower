@@ -1,0 +1,26 @@
+{
+  "name": "sunflower",
+  "version": "0.1.0",
+  "private": true,
+  "description": "compagnon d'écran 100 % local — le tournesol qui regarde votre écran et répond à voix haute",
+  "main": "dist/main/index.cjs",
+  "bin": {
+    "sunflower": "bin/sunflower.js"
+  },
+  "scripts": {
+    "start": "node scripts/build.mjs && electron .",
+    "dev": "node scripts/build.mjs --watch",
+    "build": "node scripts/build.mjs",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "smart-whisper": "0.8.1",
+    "uiohook-napi": "^1.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "electron": "^43.1.1",
+    "esbuild": "^0.27.3",
+    "typescript": "^6"
+  }
+}

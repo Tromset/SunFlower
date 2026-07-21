@@ -1,0 +1,62 @@
+/* Le compagnon : tournesol près du curseur + bulle de réponse (prototype 1a/1d). */
+html,
+body {
+  height: 100%;
+}
+
+#row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  height: 100%;
+}
+body.flip #row {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+
+#flower {
+  position: relative;
+  width: 64px;
+  height: 70px;
+  flex: 0 0 64px;
+  display: flex;
+  align-items: flex-end;
+}
+
+#flower-svg {
+  display: inline-flex;
+  transform-origin: 50% 100%;
+}
+#flower-svg.sway {
+  animation: sfSway 4s ease-in-out infinite;
+}
+
+#bubble {
+  max-width: 340px;
+  max-height: 170px;
+  overflow: hidden;
+  background: rgba(20, 20, 19, 0.94);
+  border: 1px solid var(--border-on-dark);
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: var(--shadow-panel-overlay);
+}
+
+#bubble-text {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--cream);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+#caret {
+  display: inline-block;
+  width: 7px;
+  height: 13px;
+  background: #fcd232;
+  margin-left: 4px;
+  vertical-align: -2px;
+  animation: sfCaret 1s steps(1) infinite;
+}

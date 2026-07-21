@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../shared/tokens/fonts.css" />
+    <link rel="stylesheet" href="../shared/tokens/colors.css" />
+    <link rel="stylesheet" href="../shared/tokens/typography.css" />
+    <link rel="stylesheet" href="../shared/tokens/spacing.css" />
+    <link rel="stylesheet" href="../shared/tokens/effects.css" />
+    <link rel="stylesheet" href="../shared/base.css" />
+    <link rel="stylesheet" href="./panel.css" />
+  </head>
+  <body>
+    <div id="card">
+      <header>
+        <div class="brand">
+          <span id="brand-icon"></span>
+          <span class="brand-name">sunflower</span>
+        </div>
+        <div class="live">
+          <span id="live-dot"></span>
+          <span id="live-label">actif</span>
+        </div>
+      </header>
+      <div class="divider"></div>
+
+      <div class="shortcut">
+        <span class="chip">⌃</span>
+        <span class="chip">⌥</span>
+        <span class="hint">maintenez pour parler.</span>
+      </div>
+
+      <div class="tabs">
+        <button id="tab-accueil" class="tab active" type="button">
+          accueil
+        </button>
+        <button id="tab-agents" class="tab" type="button">agents</button>
+      </div>
+
+      <section id="view-accueil">
+        <div class="section">
+          <span class="section-label">permissions</span>
+          <div class="perm-row" data-perm="microphone">
+            <span class="perm-name">microphone</span>
+            <span class="perm-status"></span>
+          </div>
+          <div class="perm-row" data-perm="accessibility">
+            <span class="perm-name">accessibilité</span>
+            <span class="perm-status"></span>
+          </div>
+          <div class="perm-row" data-perm="screen">
+            <span class="perm-name">enregistrement d'écran</span>
+            <span class="perm-status"></span>
+          </div>
+          <div class="perm-row" data-perm="screenContent">
+            <span class="perm-name">contenu d'écran</span>
+            <span class="perm-status"></span>
+          </div>
+        </div>
+
+        <div class="section">
+          <span class="section-label">modèle</span>
+          <div class="model-box">
+            <div class="model-info">
+              <span id="model-name" class="model-title">qwen3-vl:8b</span>
+              <span class="model-sub">vision · outils · via ollama</span>
+            </div>
+            <span id="model-badge" class="badge">[--] hors ligne</span>
+          </div>
+          <div class="model-box" id="voice-box">
+            <div class="model-info">
+              <span class="model-title">voix locale</span>
+              <span id="voice-sub" class="model-sub">whisper · small</span>
+            </div>
+            <span id="voice-badge" class="badge">[..] chargement</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-agents" hidden>
+        <p class="agents-empty">
+          les agents arrivent bientôt — vos apps connectées, pilotées à la
+          voix, sans quitter la maison.
+        </p>
+      </section>
+
+      <div class="divider footer-divider"></div>
+      <footer>
+        <button id="quit" type="button">quitter sunflower</button>
+        <span class="version">v0.1 · 100 % local</span>
+      </footer>
+    </div>
+    <script src="./panel.js"></script>
+  </body>
+</html>
