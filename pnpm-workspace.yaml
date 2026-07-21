@@ -3,10 +3,12 @@ packages:
   - packages/*
 allowBuilds:
   '@clerk/shared': false
-  electron: false
+  electron: true
   electron-winstaller: false
   esbuild: true
   sharp: true
+  smart-whisper: true
+  uiohook-napi: true
   workerd: true
 catalog:
   dotenv: ^17.2.2

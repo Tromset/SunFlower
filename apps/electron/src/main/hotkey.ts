@@ -1,0 +1,96 @@
+// Détection globale du maintien/relâchement de ⌃⌥ via uiohook-napi.
+// Chargement défensif : sans le module natif ou sans la permission
+// Accessibilité, l'app tourne quand même (hotkey indisponible).
+import { systemPreferences } from "electron";
+
+interface UiohookEvent {
+  keycode: number;
+}
+interface UiohookModule {
+  uIOhook: {
+    on(event: "keydown" | "keyup", cb: (e: UiohookEvent) => void): void;
+    start(): void;
+    stop(): void;
+  };
+  UiohookKey?: Record<string, number>;
+}
+
+let mod: UiohookModule | null = null;
+let loadFailed = false;
+let started = false;
+let retryTimer: NodeJS.Timeout | null = null;
+
+export function hotkeyAvailable(): boolean {
+  return started;
+}
+
+export function initHotkey(handlers: {
+  onDown: () => void;
+  onUp: () => void;
+}): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    mod = require("uiohook-napi") as UiohookModule;
+  } catch (err) {
+    loadFailed = true;
+    console.error("[sunflower] uiohook-napi indisponible :", err);
+    return;
+  }
+  const K = mod.UiohookKey ?? {};
+  const CTRL = new Set([K["Ctrl"] ?? 29, K["CtrlRight"] ?? 3613]);
+  const ALT = new Set([K["Alt"] ?? 56, K["AltRight"] ?? 3640]);
+  let ctrl = false;
+  let alt = false;
+  let active = false;
+  mod.uIOhook.on("keydown", (e) => {
+    if (CTRL.has(e.keycode)) ctrl = true;
+    else if (ALT.has(e.keycode)) alt = true;
+    else return;
+    if (ctrl && alt && !active) {
+      active = true;
+      handlers.onDown();
+    }
+  });
+  mod.uIOhook.on("keyup", (e) => {
+    if (CTRL.has(e.keycode)) ctrl = false;
+    else if (ALT.has(e.keycode)) alt = false;
+    else return;
+    if (active && !(ctrl && alt)) {
+      active = false;
+      handlers.onUp();
+    }
+  });
+  if (!tryStart()) {
+    retryTimer = setInterval(() => {
+      if (tryStart() && retryTimer) {
+        clearInterval(retryTimer);
+        retryTimer = null;
+      }
+    }, 3000);
+  }
+}
+
+function tryStart(): boolean {
+  if (started || loadFailed || !mod) return started;
+  if (!systemPreferences.isTrustedAccessibilityClient(false)) return false;
+  try {
+    mod.uIOhook.start();
+    started = true;
+  } catch (err) {
+    loadFailed = true;
+    console.error("[sunflower] uiohook start a échoué :", err);
+  }
+  return started;
+}
+
+export function stopHotkey(): void {
+  if (retryTimer) clearInterval(retryTimer);
+  if (started && mod) {
+    try {
+      mod.uIOhook.stop();
+    } catch {
+      // rien à faire à la fermeture
+    }
+    started = false;
+  }
+}

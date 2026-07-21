@@ -1,0 +1,39 @@
+/* ──────────────────────────────────────────────────────────
+   Effects — shadows, motion, gradients — CycladesAI
+   Shadows are warm-tinted and soft (brown alpha, never gray).
+   Cards lift gently on hover (translateY -4px). Motion is calm
+   and justified: soft fade-ups, decelerated counters. One ease.
+   Dark sections use radial warm/orange glows behind content.
+   ────────────────────────────────────────────────────────── */
+:root {
+  /* ---- Shadows (warm, brown-tinted) ---- */
+  --shadow-nav:    0 4px 40px rgba(93, 82, 75, 0.12);
+  --shadow-card:   0 4px 40px rgba(93, 82, 75, 0.14);
+  --shadow-hover:  0 14px 40px rgba(93, 82, 75, 0.14);
+  --shadow-panel:  0 30px 80px rgba(0, 0, 0, 0.4);   /* cream panel over dark */
+  --shadow-accent: 0 8px 30px rgba(217, 119, 87, 0.35); /* orange button hover */
+
+  /* ---- Motion ---- */
+  --ease:        cubic-bezier(0.25, 0.8, 0.25, 1); /* @kind other */
+  --dur-fast:    0.2s; /* @kind other */
+  --dur:         0.25s; /* @kind other */
+  --dur-slow:    0.5s; /* @kind other */
+  --dur-reveal:  0.7s; /* @kind other */
+
+  /* ---- Blur (frosted nav over cream) ---- */
+  --blur-nav: 12px;
+
+  /* ---- Signature gradients ---- */
+  /* Warm dark hero: orange floor-glow + ink body */
+  --grad-hero:
+    radial-gradient(90% 60% at 50% 110%, rgba(217, 119, 87, 0.28) 0%, transparent 60%),
+    radial-gradient(120% 80% at 50% -20%, #2E2A26 0%, #141413 60%); /* @kind color */
+  /* Dark CTA / acronym: bottom orange glow on ink */
+  --grad-dark-glow:
+    radial-gradient(90% 70% at 50% 120%, rgba(217, 119, 87, 0.25) 0%, transparent 60%),
+    #141413; /* @kind color */
+  /* Faint accent wash for icon plates / card corners */
+  --grad-accent-wash: radial-gradient(circle, var(--orange-tint), transparent 70%);
+  /* Thin orange divider line for dark sections */
+  --grad-glowline: linear-gradient(90deg, transparent, rgba(217, 119, 87, 0.7), transparent); /* @kind color */
+}

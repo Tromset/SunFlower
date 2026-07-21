@@ -1,0 +1,53 @@
+/* ──────────────────────────────────────────────────────────
+   Colors — CycladesAI
+   A warm, editorial palette: chaude cream paper, near-black
+   warm ink, and the Claude clay-orange accent (#D97757).
+   No cool grays, no blues. Everything leans warm.
+   ────────────────────────────────────────────────────────── */
+:root {
+  /* ---- Base palette ---- */
+  --cream:        #FEF9ED;   /* page paper, text-on-dark */
+  --cream-2:      #F7ECD9;   /* hairlines, soft buttons, dividers */
+  --cream-3:      #FBF0DC;   /* card fill on cream */
+  --ink:          #141413;   /* warm near-black — dark sections, headings */
+  --ink-2:        #1B1916;   /* slightly raised dark surface */
+  --ink-3:        #2E2A26;   /* warm dark used in radial gradients */
+  --brown:        #5D524B;   /* default body text on cream */
+  --mid:          #B0AEA5;   /* muted / disabled / labels */
+
+  --orange:       #D97757;   /* primary accent — clay */
+  --orange-deep:  #C4623F;   /* hover / pressed accent */
+  --orange-tint:  #F6E3D7;   /* faint accent wash, icon plates */
+
+  /* ---- Semantic surfaces ---- */
+  --surface-page:     var(--cream);
+  --surface-card:     var(--cream-3);
+  --surface-raised:   var(--cream);
+  --surface-soft:     var(--cream-2);
+  --surface-inverse:  var(--ink);     /* dark hero / CTA / footer */
+  --surface-inverse-2:var(--ink-2);
+  --surface-accent:   var(--orange);
+  --surface-accent-tint: var(--orange-tint);
+
+  /* ---- Semantic text ---- */
+  --text-strong:    var(--ink);       /* headings */
+  --text-body:      var(--brown);     /* paragraphs */
+  --text-muted:     var(--mid);       /* labels, captions */
+  --text-accent:    var(--orange);
+  --text-accent-deep: var(--orange-deep);
+  --text-on-dark:       var(--cream);
+  --text-on-dark-soft:  rgba(254, 249, 237, 0.72);
+  --text-on-dark-mute:  rgba(254, 249, 237, 0.45);
+  --text-on-accent:     var(--cream);
+
+  /* ---- Borders & lines ---- */
+  --border-soft:     var(--cream-2);
+  --border-on-dark:  rgba(254, 249, 237, 0.12);
+  --border-accent:   rgba(217, 119, 87, 0.28);
+
+  /* ---- Selection ---- */
+  --selection-bg: var(--orange);
+  --selection-fg: var(--cream);
+}
+
+::selection { background: var(--selection-bg); color: var(--selection-fg); }

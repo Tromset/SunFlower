@@ -27,6 +27,7 @@ Only the **language model** is local. Transcription (AssemblyAI), speech (Gradiu
 
 ```txt
 apps/
+  electron/ Electron screen companion "sunflower" — fully local (Whisper + Ollama)
   macos/    Native Swift/AppKit menu bar app
   server/   Hono Cloudflare Worker API
 packages/
@@ -38,6 +39,31 @@ The app owns the macOS experience: menu bar UI, push-to-talk, screen capture, vo
 The app never picks a model — it sends messages and the server decides which Ollama model to use. That keeps model configuration in one place (`OLLAMA_MODEL`) and means you can change models without rebuilding the app.
 
 > **Note on naming:** the Xcode project, scheme and target are still named `Glide`, and the app's URL scheme is still `glide://`. Renaming them is cosmetic and risks breaking the Clerk and Composio redirect flows, so it hasn't been done. Wherever this README says `Glide`, it means the Xcode target.
+
+## Electron app — `sunflower` (100 % local)
+
+`apps/electron` is a second, fully local implementation of the companion, built from the Claude Design prototype in `app-electron-avec-tournesol-local/`. Unlike the Swift app + Worker pair, it needs **no server, no Clerk, no API keys**: push-to-talk (hold ⌃ ⌥) → mic capture → **local Whisper** transcription (whisper.cpp, Metal) → screenshot → **local Ollama** vision model → streamed answer in a speech bubble next to a pixel-art sunflower that follows your cursor, spoken aloud with the macOS system voice. French UI.
+
+Surfaces: a status island under the menu-bar notch, the cursor-following sunflower companion with its speech bubble, an orange pointing overlay (the model can highlight one on-screen element), a menu-bar tray panel (live permissions, model status, quit), and a 3-step onboarding on first launch.
+
+### Run it
+
+```bash
+pnpm install        # once, at the repo root (builds whisper.cpp — needs Xcode CLT)
+npm start           # at the repo root (or in apps/electron)
+```
+
+Or install the global command:
+
+```bash
+cd apps/electron
+npm link
+sunflower           # from anywhere
+```
+
+Requirements: [Ollama](https://ollama.com) running (`ollama serve`) with a **vision-capable** model pulled. The default is `qwen3-vl:8b`; if it's absent, sunflower automatically uses the first local model with the `vision` capability. The Whisper model (`ggml-small-q5_1`, ~190 MB) downloads once on first launch into `~/Library/Application Support/sunflower/models/`.
+
+macOS permissions (requested during onboarding, all grants go to the Electron binary): microphone, accessibility (global ⌃ ⌥ hotkey), screen recording. Config lives in `~/Library/Application Support/sunflower/config.json` (`ollamaHost`, `ollamaModel`, `whisperModel`); `OLLAMA_HOST` env var overrides the host. Sunflower's own windows are excluded from its screenshots via content protection.
 
 ## Prerequisites
 
