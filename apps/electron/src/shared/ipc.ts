@@ -16,6 +16,7 @@ export const CH = {
   answerDone: "sf:answer-done",
   ttsStop: "sf:tts-stop",
   pointShow: "sf:point-show",
+  guideStep: "sf:guide-step",
   panelData: "sf:panel-data",
   flip: "sf:flip",
   // renderer → main (send)
@@ -40,6 +41,15 @@ export interface MicDataPayload {
 
 export type MicErrorCode = "denied" | "failed";
 
+/** Étape de guide annoncée au compagnon (bulle + voix). */
+export interface GuideStepPayload {
+  index: number;
+  total: number;
+  text: string;
+  /** L'utilisateur a déjà agi : couper la voix en cours avant de parler. */
+  cut: boolean;
+}
+
 type Unsubscribe = () => void;
 
 /** Surface exposée aux renderers par le preload (window.sunflower). */
@@ -52,6 +62,7 @@ export interface SunflowerBridge {
   onAnswerDone(cb: (full: string) => void): Unsubscribe;
   onTtsStop(cb: () => void): Unsubscribe;
   onPointShow(cb: () => void): Unsubscribe;
+  onGuideStep(cb: (p: GuideStepPayload) => void): Unsubscribe;
   onPanelData(cb: (d: PanelData) => void): Unsubscribe;
   onFlip(cb: (side: "left" | "right") => void): Unsubscribe;
   sendMicData(pcm: Float32Array, sampleRate: number): void;

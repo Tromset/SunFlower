@@ -30,6 +30,7 @@ const ICONS: Record<IslandState, PixelArt> = {
   thinking: POSES.idle,
   acting: POSES.idle,
   answering: POSES.answering,
+  guiding: POSES.pointing,
   error: POSES.idle,
 };
 
@@ -51,6 +52,8 @@ function render(payload: StatePayload): void {
     )}`;
   } else if (state === "acting") {
     labelEl.textContent = `[->] ${payload.message ?? "an agent is working…"}`;
+  } else if (state === "guiding") {
+    labelEl.textContent = payload.message ?? "guiding…";
   } else {
     labelEl.textContent = LABELS[state] ?? "";
   }

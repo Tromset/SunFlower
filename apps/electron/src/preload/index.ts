@@ -21,6 +21,7 @@ const bridge: SunflowerBridge = {
   onAnswerDone: (cb) => on(CH.answerDone, cb as (...a: unknown[]) => void),
   onTtsStop: (cb) => on(CH.ttsStop, cb),
   onPointShow: (cb) => on(CH.pointShow, cb),
+  onGuideStep: (cb) => on(CH.guideStep, cb as (...a: unknown[]) => void),
   onPanelData: (cb) => on(CH.panelData, cb as (...a: unknown[]) => void),
   onFlip: (cb) => on(CH.flip, cb as (...a: unknown[]) => void),
   sendMicData: (pcm: Float32Array, sampleRate: number) =>

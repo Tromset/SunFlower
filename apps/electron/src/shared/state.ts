@@ -4,7 +4,8 @@ export type AppPhase =
   | "listening"
   | "processing"
   | "thinking"
-  | "responding";
+  | "responding"
+  | "guiding";
 
 /** States displayed by the island (prototype surface 1c). */
 export type IslandState =
@@ -14,6 +15,7 @@ export type IslandState =
   | "thinking"
   | "acting"
   | "answering"
+  | "guiding"
   | "error";
 
 /** Poses of the sunflower companion (prototype surface 1d). */

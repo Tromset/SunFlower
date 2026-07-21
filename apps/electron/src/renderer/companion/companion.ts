@@ -13,6 +13,7 @@ ensureBridge();
 const flowerSvg = document.getElementById("flower-svg")!;
 const bubble = document.getElementById("bubble")!;
 const bubbleText = document.getElementById("bubble-text")!;
+const stepBadge = document.getElementById("step-badge")!;
 
 /* ~4.25 px per art pixel: the 1a flower is 51×38 for a 12×9 viewBox. */
 const SCALE = 4.25;
@@ -33,6 +34,7 @@ window.sunflower.onState((payload: StatePayload) => {
   if (payload.island === "idle" || payload.island === "listening") {
     bubble.hidden = true;
     bubbleText.textContent = "";
+    stepBadge.hidden = true;
     // No idle state may ever coexist with an active voice.
     if (payload.island === "idle") stopTts();
   }
@@ -41,6 +43,7 @@ window.sunflower.onState((payload: StatePayload) => {
 window.sunflower.onAnswerReset(() => {
   bubbleText.textContent = "";
   bubble.hidden = true;
+  stepBadge.hidden = true;
   stopTts();
 });
 
@@ -57,6 +60,18 @@ window.sunflower.onAnswerDone(() => {
 
 window.sunflower.onTtsStop(() => {
   stopTts();
+});
+
+// Étape de guide : la bulle est remplacée (pas ajoutée) et lue à voix haute.
+window.sunflower.onGuideStep(({ index, total, text, cut }) => {
+  if (cut) stopTts();
+  bubble.hidden = false;
+  stepBadge.hidden = false;
+  stepBadge.textContent = `step ${index} of ${total}`;
+  bubbleText.textContent = text;
+  bubble.scrollTop = 0;
+  pushText(text);
+  finish();
 });
 
 window.sunflower.onFlip((side) => {

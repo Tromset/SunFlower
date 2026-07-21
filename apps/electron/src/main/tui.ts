@@ -48,6 +48,8 @@ export interface Tui {
   answerToken(text: string): void;
   /** Fin de réponse : ligne de durée. */
   answerDone(): void;
+  /** Étape de guide annoncée (le prompt reste actif pendant un guide). */
+  guideStep(index: number, total: number, text: string): void;
   /** Détail d'erreur — visible seulement avec SUNFLOWER_DEBUG=1. */
   sessionError(context: string, err: unknown): void;
   /** Ligne libre, écrite proprement au-dessus du prompt/spinner. */
@@ -280,6 +282,17 @@ export function createTui(streams?: {
       case "acting":
         busyUi = true;
         break;
+      case "guiding":
+        // Prompt actif : taper une question annule le guide en cours.
+        busyUi = false;
+        stopSpinner();
+        if (streaming) {
+          out.write("\n");
+          streaming = false;
+        }
+        sawToken = false;
+        showPrompt();
+        break;
       case "error": {
         busyUi = true; // l'idle qui suit ramènera le prompt
         stopSpinner();
@@ -341,6 +354,15 @@ export function createTui(streams?: {
     sawToken = false;
     const secs = t0 > 0 ? ((Date.now() - t0) / 1000).toFixed(1) : "?";
     writeLine(dim(`✓ answered in ${secs}s`));
+  };
+
+  const guideStep = (index: number, total: number, text: string) => {
+    if (disposed) return;
+    if (!fancy) {
+      out.write(`[sunflower] step ${index}/${total}: ${text}\n`);
+      return;
+    }
+    writeLine(`${yellow("➤")} ${dim(`step ${index}/${total}`)} ${text}`);
   };
 
   const sessionError = (context: string, err: unknown) => {
@@ -411,6 +433,7 @@ export function createTui(streams?: {
     chatStatus,
     answerToken,
     answerDone,
+    guideStep,
     sessionError,
     log: (line: string) => writeLine(line),
     startRepl,
