@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Commande globale `sunflower` (npm link) : build si nécessaire, puis lance Electron.
+// Global `sunflower` command (npm link): build if needed, then launch Electron.
 "use strict";
 const { spawn, spawnSync } = require("node:child_process");
 const { existsSync } = require("node:fs");
@@ -12,13 +12,13 @@ try {
   electronBin = require(require.resolve("electron", { paths: [appRoot] }));
 } catch {
   console.error(
-    "sunflower : electron est introuvable — lancez d'abord `pnpm install` à la racine du repo.",
+    "sunflower: electron not found — run `pnpm install` at the repo root first.",
   );
   process.exit(1);
 }
 
-// dist/.build-ok n'est écrit qu'en toute fin de build : un build partiel
-// (interrompu, ou bundle renderer en échec) déclenche une reconstruction.
+// dist/.build-ok is only written at the very end of a build: a partial build
+// (interrupted, or a failed renderer bundle) triggers a rebuild.
 if (!existsSync(path.join(appRoot, "dist", ".build-ok"))) {
   const build = spawnSync(
     process.execPath,

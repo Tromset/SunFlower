@@ -11,7 +11,7 @@ export async function createOnboardingWindow(): Promise<BrowserWindow> {
     maximizable: false,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 18, y: 18 },
-    backgroundColor: "#FEF9ED",
+    backgroundColor: "#141413",
     title: "sunflower",
     webPreferences: {
       preload: preloadPath(),

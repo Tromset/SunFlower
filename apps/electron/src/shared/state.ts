@@ -1,4 +1,4 @@
-/** Phases internes de la machine à états (processus main). */
+/** Internal phases of the state machine (main process). */
 export type AppPhase =
   | "idle"
   | "listening"
@@ -6,23 +6,23 @@ export type AppPhase =
   | "thinking"
   | "responding";
 
-/** États affichés par l'îlot (surface 1c du prototype). */
+/** States displayed by the island (prototype surface 1c). */
 export type IslandState =
-  | "veille"
-  | "ecoute"
-  | "lecture"
-  | "reflexion"
-  | "action"
-  | "reponse"
-  | "erreur";
+  | "idle"
+  | "listening"
+  | "reading"
+  | "thinking"
+  | "acting"
+  | "answering"
+  | "error";
 
-/** Poses du compagnon tournesol (surface 1d du prototype). */
+/** Poses of the sunflower companion (prototype surface 1d). */
 export type CompanionPose =
-  | "veille"
-  | "ecoute"
-  | "reflexion"
-  | "reponse"
-  | "pointage";
+  | "idle"
+  | "listening"
+  | "thinking"
+  | "answering"
+  | "pointing";
 
 export type PermissionId =
   | "microphone"
@@ -43,7 +43,7 @@ export type SttStatus =
 export interface StatePayload {
   island: IslandState;
   pose: CompanionPose;
-  /** Message d'erreur (état `erreur`) ou libellé d'action. */
+  /** Error message (`error` state) or action label. */
   message?: string;
 }
 
@@ -57,7 +57,7 @@ export interface PanelData {
   };
   stt: {
     status: SttStatus;
-    /** Progression du téléchargement du modèle, 0..100. */
+    /** Model download progress, 0..100. */
     progress?: number;
     error?: string;
     model: string;

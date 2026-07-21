@@ -1,6 +1,6 @@
-// Voix locale macOS via speechSynthesis, phrase par phrase pendant le stream.
-// Les utterances sont taguées par génération : les événements d'annulation
-// asynchrones d'une session interrompue ne corrompent pas la suivante.
+// Local macOS voice via speechSynthesis, sentence by sentence during the stream.
+// Utterances are tagged per generation: async cancellation events from an
+// interrupted session cannot corrupt the next one.
 const SENTENCE_END = /^([\s\S]*?[.!?…])(?:\s+|$)/;
 
 let voice: SpeechSynthesisVoice | null = null;
@@ -14,10 +14,10 @@ let onAllEnded: (() => void) | null = null;
 function pickVoice(): void {
   const voices = speechSynthesis.getVoices();
   if (voices.length === 0) return;
-  const fr = voices.filter((v) => v.lang.toLowerCase().startsWith("fr"));
+  const en = voices.filter((v) => v.lang.toLowerCase().startsWith("en"));
   voice =
-    fr.find((v) => v.localService) ??
-    fr[0] ??
+    en.find((v) => v.localService) ??
+    en[0] ??
     voices.find((v) => v.localService) ??
     voices[0] ??
     null;
@@ -32,7 +32,7 @@ function speak(text: string): void {
   const clean = text.trim();
   if (!clean || typeof speechSynthesis === "undefined") return;
   const utterance = new SpeechSynthesisUtterance(clean);
-  utterance.lang = "fr-FR";
+  utterance.lang = "en-US";
   if (voice) utterance.voice = voice;
   utterance.rate = 1;
   pending++;
@@ -68,13 +68,13 @@ export function pushText(text: string): void {
   }
 }
 
-/** Fin du stream : prononce le reliquat puis signale la fin de la voix. */
+/** End of stream: speak the remainder, then signal the end of the voice. */
 export function finish(): void {
   if (buffer.trim()) speak(buffer);
   buffer = "";
   finished = true;
   if (typeof speechSynthesis === "undefined" || pending === 0) {
-    // Pas de voix disponible : laisser le temps de lire la bulle.
+    // No voice available: leave time to read the bubble.
     finished = false;
     if (fallbackTimer) clearTimeout(fallbackTimer);
     fallbackTimer = setTimeout(() => {

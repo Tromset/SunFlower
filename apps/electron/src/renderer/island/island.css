@@ -1,4 +1,4 @@
-/* L'îlot sous l'encoche — prototype 1a (attaché) + états 1c. */
+/* The island under the notch — prototype 1a (attached) + 1c states. */
 html,
 body {
   height: 100%;
@@ -41,7 +41,7 @@ body {
   display: none;
 }
 #label .warn {
-  color: #fcd232;
+  color: var(--yellow);
 }
 
 #wave {
@@ -53,7 +53,7 @@ body {
 #wave span {
   width: 3px;
   height: 14px;
-  background: #fcd232;
+  background: var(--yellow);
   transform-origin: center;
 }
 #wave.anim span {
@@ -79,7 +79,7 @@ body {
 #dots span {
   width: 5px;
   height: 5px;
-  background: #fcd232;
+  background: var(--yellow);
   animation: sfDots 1.4s ease-in-out infinite;
 }
 #dots span:nth-child(2) {
@@ -98,25 +98,25 @@ body {
   white-space: nowrap;
 }
 
-/* ---- États ---- */
-.state-veille #dot {
+/* ---- States ---- */
+.state-idle #dot {
   display: inline-block;
 }
-.state-ecoute #label,
-.state-lecture #label,
-.state-reflexion #label,
-.state-action #label,
-.state-reponse #label,
-.state-erreur #label {
+.state-listening #label,
+.state-reading #label,
+.state-thinking #label,
+.state-acting #label,
+.state-answering #label,
+.state-error #label {
   display: inline;
 }
-.state-ecoute #wave,
-.state-reponse #wave {
+.state-listening #wave,
+.state-answering #wave {
   display: inline-flex;
 }
-.state-reflexion #dots {
+.state-thinking #dots {
   display: inline-flex;
 }
-.state-erreur #badge {
+.state-error #badge {
   display: none;
 }

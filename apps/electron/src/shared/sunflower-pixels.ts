@@ -1,7 +1,7 @@
 /**
- * Rects pixel-art du tournesol, relevés au pixel près sur le prototype
- * (SunFlower.dc.html, surfaces 1a/1c/1d/1e). Consommés en SVG côté renderer
- * et rasterisés en PNG côté main (icône de tray).
+ * Pixel-art rects of the sunflower, lifted pixel-perfect from the prototype
+ * (SunFlower.dc.html, surfaces 1a/1c/1d/1e). Consumed as SVG on the renderer
+ * side and rasterized to PNG on the main side (tray icon).
  */
 export interface PixelRect {
   x: number;
@@ -12,28 +12,28 @@ export interface PixelRect {
 }
 
 export interface PixelLayer {
-  /** Transform SVG optionnel (rotation du pointage, translation de la réflexion). */
+  /** Optional SVG transform (pointing rotation, thinking translation). */
   transform?: string;
   rects: PixelRect[];
 }
 
 export interface PixelArt {
-  /** [largeur, hauteur] du viewBox. */
+  /** [width, height] of the viewBox. */
   vb: [number, number];
   layers: PixelLayer[];
 }
 
-const Y = "#FCD232"; // pétales
-const YD = "#D3B12F"; // étincelle sombre
-const B = "#8B5A2B"; // cœur
-const G1 = "#458149"; // tige claire
-const G2 = "#3C6E41"; // tige sombre
+const Y = "#FCD232"; // petals
+const YD = "#D3B12F"; // dark sparkle
+const B = "#8B5A2B"; // core
+const G1 = "#458149"; // light stem
+const G2 = "#3C6E41"; // dark stem
 const G3 = "#325A38"; // base
-const O = "#D97757"; // accent argile
+const O = "#D97757"; // clay accent
 const INK = "#141413";
-const HL = "#F6E3D7"; // reflet lecture
+const HL = "#F6E3D7"; // reading glint
 
-/** Fleur de base (pose veille), viewBox 8×9. */
+/** Base flower (idle pose), viewBox 8×9. */
 const BASE: PixelRect[] = [
   { x: 2, y: 0, w: 4, h: 2, c: Y },
   { x: 0, y: 2, w: 8, h: 2, c: Y },
@@ -44,8 +44,8 @@ const BASE: PixelRect[] = [
   { x: 3, y: 8, w: 2, h: 1, c: G3 },
 ];
 
-/** Pétales ouverts — l'îlot (1c) n'ouvre que les deux du haut, la pose
-    compagnon (1d) les quatre. */
+/** Open petals — the island (1c) only opens the top two, the companion
+    pose (1d) all four. */
 const OPEN_PETALS_TOP: PixelRect[] = [
   { x: 1, y: 1, w: 1, h: 1, c: Y },
   { x: 6, y: 1, w: 1, h: 1, c: Y },
@@ -56,13 +56,13 @@ const OPEN_PETALS: PixelRect[] = [
   { x: 6, y: 4, w: 1, h: 1, c: Y },
 ];
 
-/** Icône « écoute » de l'îlot (surface 1c) — deux pétales hauts seulement. */
-export const ISLAND_ECOUTE: PixelArt = {
+/** Island "listening" icon (surface 1c) — top petals only. */
+export const ISLAND_LISTENING: PixelArt = {
   vb: [8, 9],
   layers: [{ rects: [...BASE, ...OPEN_PETALS_TOP] }],
 };
 
-/** Marque de parole (réponse). */
+/** Speech mark (answering). */
 const SPEECH: PixelRect[] = [
   { x: 9, y: 2, w: 1, h: 1, c: O },
   { x: 9, y: 4, w: 1, h: 1, c: O },
@@ -70,13 +70,13 @@ const SPEECH: PixelRect[] = [
 ];
 
 export const POSES = {
-  veille: { vb: [8, 9], layers: [{ rects: BASE }] },
-  ecoute: { vb: [8, 9], layers: [{ rects: [...BASE, ...OPEN_PETALS] }] },
-  lecture: {
+  idle: { vb: [8, 9], layers: [{ rects: BASE }] },
+  listening: { vb: [8, 9], layers: [{ rects: [...BASE, ...OPEN_PETALS] }] },
+  reading: {
     vb: [8, 9],
     layers: [{ rects: [...BASE, { x: 3, y: 2, w: 1, h: 1, c: HL }] }],
   },
-  reflexion: {
+  thinking: {
     vb: [11, 11],
     layers: [
       {
@@ -88,8 +88,8 @@ export const POSES = {
       { transform: "translate(0,2)", rects: BASE },
     ],
   },
-  reponse: { vb: [12, 9], layers: [{ rects: [...BASE, ...SPEECH] }] },
-  pointage: {
+  answering: { vb: [12, 9], layers: [{ rects: [...BASE, ...SPEECH] }] },
+  pointing: {
     vb: [12, 11],
     layers: [
       { transform: "rotate(8 4 9)", rects: BASE },
@@ -104,7 +104,7 @@ export const POSES = {
   },
 } satisfies Record<string, PixelArt>;
 
-/** Variante orange de la barre de menus (surface 1a). */
+/** Orange menu-bar variant (surface 1a). */
 function menubarArt(core: string): PixelArt {
   return {
     vb: [8, 9],
@@ -123,10 +123,10 @@ function menubarArt(core: string): PixelArt {
   };
 }
 export const MENUBAR: PixelArt = menubarArt(INK);
-/** Barre de menus sombre : le cœur ink disparaîtrait — cœur crème. */
+/** Dark menu bar: an ink core would vanish — use a cream core. */
 export const MENUBAR_DARK: PixelArt = menubarArt("#FEF9ED");
 
-/** Tournesol des champs (pieds de page 1a/1e) — tige simple. */
+/** Field sunflower (footers 1a/1e) — simple stem. */
 export const FIELD: PixelArt = {
   vb: [8, 9],
   layers: [
@@ -142,7 +142,7 @@ export const FIELD: PixelArt = {
   ],
 };
 
-/** Crochets de pointage (surface 1a), viewBox 30×18. */
+/** Pointing brackets (surface 1a), viewBox 30×18. */
 export const BRACKETS: PixelArt = {
   vb: [30, 18],
   layers: [

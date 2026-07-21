@@ -78,10 +78,10 @@ function loadModule(): boolean {
     mod = require("smart-whisper") as SmartWhisperModule;
     return true;
   } catch (err) {
-    console.error("[sunflower] smart-whisper indisponible :", err);
+    console.error("[sunflower] smart-whisper unavailable:", err);
     setStatus(
       "disabled",
-      "module whisper natif indisponible — réinstallez avec pnpm install.",
+      "native whisper module unavailable — reinstall with pnpm install.",
     );
     return false;
   }
@@ -90,7 +90,7 @@ function loadModule(): boolean {
 function download(url: string, dest: string, redirects = 0): Promise<void> {
   return new Promise((resolve, reject) => {
     if (redirects > 5) {
-      reject(new Error("trop de redirections"));
+      reject(new Error("too many redirects"));
       return;
     }
     https
@@ -103,7 +103,7 @@ function download(url: string, dest: string, redirects = 0): Promise<void> {
         }
         if (statusCode !== 200) {
           res.resume();
-          reject(new Error(`téléchargement du modèle : HTTP ${statusCode}`));
+          reject(new Error(`model download: HTTP ${statusCode}`));
           return;
         }
         const total = Number(headers["content-length"] ?? 0);
@@ -146,7 +146,7 @@ export function ensureStt(): Promise<void> {
         await rm(tmp, { force: true });
         setStatus(
           "absent",
-          `téléchargement du modèle de voix impossible : ${String(
+          `couldn't download the voice model: ${String(
             err instanceof Error ? err.message : err,
           )}`,
         );
@@ -164,7 +164,7 @@ export function ensureStt(): Promise<void> {
       instance = null;
       setStatus(
         "error",
-        `whisper n'a pas pu démarrer : ${String(
+        `whisper couldn't start: ${String(
           err instanceof Error ? err.message : err,
         )}`,
       );
@@ -175,9 +175,9 @@ export function ensureStt(): Promise<void> {
 }
 
 async function transcribeRaw(pcm: Float32Array): Promise<string> {
-  if (!instance) throw new Error("whisper non chargé");
+  if (!instance) throw new Error("whisper not loaded");
   const task = await instance.transcribe(pcm, {
-    language: "fr",
+    language: "en",
     suppress_blank: true,
   });
   const segments = await task.result;
@@ -207,12 +207,12 @@ export async function transcribe(
   pcm: Float32Array,
   sampleRate: number,
 ): Promise<string> {
-  if (!sttReady()) throw new Error("stt non prêt");
+  if (!sttReady()) throw new Error("stt not ready");
   const input = resampleTo16k(pcm, sampleRate);
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(
-      () => reject(new Error("transcription trop longue")),
+      () => reject(new Error("transcription took too long")),
       45_000,
     );
   });

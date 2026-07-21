@@ -33,7 +33,7 @@ export function initHotkey(handlers: {
     mod = require("uiohook-napi") as UiohookModule;
   } catch (err) {
     loadFailed = true;
-    console.error("[sunflower] uiohook-napi indisponible :", err);
+    console.error("[sunflower] uiohook-napi unavailable:", err);
     return;
   }
   const K = mod.UiohookKey ?? {};
@@ -78,7 +78,7 @@ function tryStart(): boolean {
     started = true;
   } catch (err) {
     loadFailed = true;
-    console.error("[sunflower] uiohook start a échoué :", err);
+    console.error("[sunflower] uiohook start failed:", err);
   }
   return started;
 }

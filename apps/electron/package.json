@@ -2,7 +2,7 @@
   "name": "sunflower",
   "version": "0.1.0",
   "private": true,
-  "description": "compagnon d'écran 100 % local — le tournesol qui regarde votre écran et répond à voix haute",
+  "description": "100% local screen companion — the sunflower that watches your screen and answers out loud",
   "main": "dist/main/index.cjs",
   "bin": {
     "sunflower": "bin/sunflower.js"

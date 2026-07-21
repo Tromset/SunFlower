@@ -42,9 +42,27 @@ The app never picks a model — it sends messages and the server decides which O
 
 ## Electron app — `sunflower` (100 % local)
 
-`apps/electron` is a second, fully local implementation of the companion, built from the Claude Design prototype in `app-electron-avec-tournesol-local/`. Unlike the Swift app + Worker pair, it needs **no server, no Clerk, no API keys**: push-to-talk (hold ⌃ ⌥) → mic capture → **local Whisper** transcription (whisper.cpp, Metal) → screenshot → **local Ollama** vision model → streamed answer in a speech bubble next to a pixel-art sunflower that follows your cursor, spoken aloud with the macOS system voice. French UI.
+`apps/electron` is a second, fully local implementation of the companion, built from the Claude Design prototype in `app-electron-avec-tournesol-local/`. Unlike the Swift app + Worker pair, it needs **no server, no Clerk, no API keys**: push-to-talk (hold ⌃ ⌥) → mic capture → **local Whisper** transcription (whisper.cpp, Metal) → screenshot → **local Ollama** vision model → streamed answer in a speech bubble next to a pixel-art sunflower that follows your cursor, spoken aloud with the macOS system voice. English UI, in the app's black-and-yellow theme.
 
 Surfaces: a status island under the menu-bar notch, the cursor-following sunflower companion with its speech bubble, an orange pointing overlay (the model can highlight one on-screen element), a menu-bar tray panel (live permissions, model status, quit), and a 3-step onboarding on first launch.
+
+### Screenshots
+
+The onboarding walks through welcome, permissions, and the local-model check — in the same black-and-yellow theme as the running app:
+
+| Welcome | Permissions | Local model |
+| --- | --- | --- |
+| ![Onboarding welcome step](apps/electron/docs/screenshots/onboarding-welcome.png) | ![Onboarding permissions step](apps/electron/docs/screenshots/onboarding-permissions.png) | ![Onboarding local-model step](apps/electron/docs/screenshots/onboarding-model.png) |
+
+The menu-bar panel shows live permission, model, and voice status:
+
+![Menu-bar panel](apps/electron/docs/screenshots/panel.png)
+
+The status island sits under the notch while sunflower listens and answers, and the cursor-following companion streams the reply in a speech bubble:
+
+| Listening | Answering | Companion |
+| --- | --- | --- |
+| ![Island listening state](apps/electron/docs/screenshots/island-listening.png) | ![Island answering state](apps/electron/docs/screenshots/island-answering.png) | ![Cursor companion with speech bubble](apps/electron/docs/screenshots/companion.png) |
 
 ### Run it
 
