@@ -48,6 +48,8 @@ export interface Tui {
   answerToken(text: string): void;
   /** Fin de réponse : ligne de durée. */
   answerDone(): void;
+  /** Budget de contexte atteint : un tchat neuf démarre. */
+  contextReset(tokens: number): void;
   /** Étape de guide annoncée (le prompt reste actif pendant un guide). */
   guideStep(index: number, total: number, text: string): void;
   /** Détail d'erreur — visible seulement avec SUNFLOWER_DEBUG=1. */
@@ -356,6 +358,15 @@ export function createTui(streams?: {
     writeLine(dim(`✓ answered in ${secs}s`));
   };
 
+  const contextReset = (tokens: number) => {
+    const label = `${(tokens / 1000).toFixed(1)}k context tokens — starting a fresh chat`;
+    if (!fancy) {
+      out.write(`[sunflower] ${label}\n`);
+      return;
+    }
+    writeLine(`${yellow("✦")} ${dim(label)}`);
+  };
+
   const guideStep = (index: number, total: number, text: string) => {
     if (disposed) return;
     if (!fancy) {
@@ -433,6 +444,7 @@ export function createTui(streams?: {
     chatStatus,
     answerToken,
     answerDone,
+    contextReset,
     guideStep,
     sessionError,
     log: (line: string) => writeLine(line),

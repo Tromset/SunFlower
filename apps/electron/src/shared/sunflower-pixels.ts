@@ -30,7 +30,6 @@ const G1 = "#458149"; // light stem
 const G2 = "#3C6E41"; // dark stem
 const G3 = "#325A38"; // base
 const O = "#D97757"; // clay accent
-const INK = "#141413";
 const HL = "#F6E3D7"; // reading glint
 
 /** Base flower (idle pose), viewBox 8×9. */

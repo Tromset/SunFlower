@@ -107,6 +107,51 @@ async function isModelLoaded(model: string): Promise<boolean> {
 let warming: Promise<void> | null = null;
 let warmedAt = 0;
 
+// ---- Budget de contexte ----------------------------------------------
+// Chaque question repart de zéro côté messages, mais le runner Ollama, lui,
+// survit d'une question à l'autre (keep_alive + cache de préfixe/KV) — et
+// avec les petits modèles vision, cet état accumulé finit par dégrader les
+// réponses. Au-delà de ce budget de tokens réellement consommés (mesurés par
+// Ollama, prompt + réponse), on repart sur un tchat neuf : modèle déchargé
+// (tout son état avec) puis préchargé en arrière-plan pendant que
+// l'utilisateur lit la réponse.
+const CONTEXT_RESET_TOKENS = 10_000;
+
+let sessionTokens = 0;
+let resetListener: ((tokens: number) => void) | null = null;
+
+/** Abonné unique (terminal) : prévenu quand un nouveau tchat démarre. */
+export function onContextReset(cb: (tokens: number) => void): void {
+  resetListener = cb;
+}
+
+/** Décharge le runner (keep_alive: 0) puis le précharge : tchat neuf. */
+async function resetContext(): Promise<void> {
+  const tokens = sessionTokens;
+  sessionTokens = 0;
+  resetListener?.(tokens);
+  try {
+    const model = await resolveModel();
+    await fetch(`${ollamaHost()}/api/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      signal: AbortSignal.timeout(10_000),
+      body: JSON.stringify({ model, messages: [], stream: false, keep_alive: 0 }),
+    });
+  } catch {
+    // au pire, le prochain chat rechargera le modèle lui-même
+  }
+  warmedAt = 0; // sinon warmModel se croit encore chaud et ne fait rien
+  warmModel();
+}
+
+/** Comptabilise une réponse terminée ; déclenche le reset au-delà du budget.
+ *  Les réponses interrompues n'ont pas de compteurs Ollama : non comptées. */
+function recordUsage(promptTokens: number, answerTokens: number): void {
+  sessionTokens += promptTokens + answerTokens;
+  if (sessionTokens >= CONTEXT_RESET_TOKENS) void resetContext();
+}
+
 /**
  * Précharge le modèle sans le solliciter (messages vide : pattern officiel
  * Ollama, répond dès que le modèle est en mémoire). Fire-and-forget :
@@ -276,6 +321,8 @@ export async function chat(opts: ChatOptions): Promise<string> {
           message?: { content?: string };
           done?: boolean;
           error?: string;
+          prompt_eval_count?: number;
+          eval_count?: number;
         };
         try {
           parsed = JSON.parse(line);
@@ -288,7 +335,10 @@ export async function chat(opts: ChatOptions): Promise<string> {
           full += content;
           opts.onToken(content);
         }
-        if (parsed.done) return full;
+        if (parsed.done) {
+          recordUsage(parsed.prompt_eval_count ?? 0, parsed.eval_count ?? 0);
+          return full;
+        }
       }
     }
     return full;

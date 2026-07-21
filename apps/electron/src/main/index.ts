@@ -10,7 +10,7 @@ import {
   onGlobalMouseDown,
   stopHotkey,
 } from "./hotkey";
-import { chat, checkOllama, warmModel } from "./ollama";
+import { chat, checkOllama, onContextReset, warmModel } from "./ollama";
 import {
   permissionStatuses,
   requestPermission,
@@ -122,6 +122,8 @@ async function main(): Promise<void> {
     void pushStatus();
     tui.refreshStt(sttState());
   });
+  // Budget de contexte atteint : le tchat repart de zéro, dire pourquoi.
+  onContextReset((tokens) => tui.contextReset(tokens));
 
   const showMainSurfaces = () => {
     island?.showInactive();
