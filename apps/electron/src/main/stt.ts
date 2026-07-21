@@ -37,6 +37,10 @@ interface SmartWhisperModule {
   ) => WhisperInstance;
 }
 
+// whisper.cpp exige au moins 1 s d'audio ; marge incluse car sa fenêtre
+// mel perd une trame en bord de tampon (8000 échantillons → "490 ms").
+const MIN_PCM_SAMPLES = 17_600; // 1,1 s à 16 kHz
+
 let status: SttStatus = "loading";
 let progress = 0;
 let lastError = "";
@@ -157,8 +161,8 @@ export function ensureStt(): Promise<void> {
     setStatus("loading");
     try {
       instance = new mod!.Whisper(dest, { offload: 300 });
-      // Warm-up : une demi-seconde de silence charge le modèle en mémoire.
-      await transcribeRaw(new Float32Array(8000));
+      // Warm-up : un tampon de silence charge le modèle en mémoire.
+      await transcribeRaw(new Float32Array(MIN_PCM_SAMPLES));
       setStatus("ready");
     } catch (err) {
       instance = null;
@@ -174,9 +178,18 @@ export function ensureStt(): Promise<void> {
   return loadPromise;
 }
 
+// Complète avec du silence : sous la durée minimale, whisper.cpp ne
+// transcrit rien et suggère lui-même ce rembourrage.
+function padToMinimum(pcm: Float32Array): Float32Array {
+  if (pcm.length >= MIN_PCM_SAMPLES) return pcm;
+  const padded = new Float32Array(MIN_PCM_SAMPLES);
+  padded.set(pcm);
+  return padded;
+}
+
 async function transcribeRaw(pcm: Float32Array): Promise<string> {
   if (!instance) throw new Error("whisper not loaded");
-  const task = await instance.transcribe(pcm, {
+  const task = await instance.transcribe(padToMinimum(pcm), {
     language: "en",
     suppress_blank: true,
   });
