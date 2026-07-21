@@ -51,6 +51,7 @@ export function ensureBridge(): void {
     onAnswerDone: sub("answerDone"),
     onTtsStop: sub("ttsStop"),
     onPointShow: sub("pointShow"),
+    onGuideStep: sub("guideStep"),
     onPanelData: sub("panelData"),
     onFlip: sub("flip"),
     sendMicData: () => {},

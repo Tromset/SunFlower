@@ -108,6 +108,7 @@ body {
 .state-thinking #label,
 .state-acting #label,
 .state-answering #label,
+.state-guiding #label,
 .state-error #label {
   display: inline;
 }

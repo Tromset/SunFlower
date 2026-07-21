@@ -1,8 +1,15 @@
-import { BrowserWindow, app, ipcMain } from "electron";
+import { BrowserWindow, app, ipcMain, screen } from "electron";
 import { CH, type MicDataPayload, type MicErrorCode } from "../shared/ipc";
 import type { PanelData, PermissionId } from "../shared/state";
 import { getConfig, setConfig } from "./config-store";
-import { hotkeyAvailable, initHotkey, stopHotkey } from "./hotkey";
+import { createGuideRunner } from "./guide-runner";
+import {
+  hotkeyAvailable,
+  initHotkey,
+  mouseHookAvailable,
+  onGlobalMouseDown,
+  stopHotkey,
+} from "./hotkey";
 import { chat, checkOllama, warmModel } from "./ollama";
 import {
   permissionStatuses,
@@ -24,7 +31,11 @@ import {
 } from "./stt";
 import { createTray, trayBounds } from "./tray";
 import { createTui, type TuiStatusInfo } from "./tui";
-import { createCompanionWindow, startCursorFollow } from "./windows/companion";
+import {
+  createCompanionController,
+  createCompanionWindow,
+  type CompanionController,
+} from "./windows/companion";
 import { createIslandWindow } from "./windows/island";
 import { createOnboardingWindow } from "./windows/onboarding";
 import { createPanelWindow, togglePanel } from "./windows/panel";
@@ -65,7 +76,7 @@ async function main(): Promise<void> {
   let panel: BrowserWindow | null = null;
   let onboarding: BrowserWindow | null = null;
   let machine: SessionMachine | null = null;
-  let stopFollow: (() => void) | null = null;
+  let companionCtl: CompanionController | null = null;
   let quitting = false;
 
   const sendTo = (
@@ -115,7 +126,9 @@ async function main(): Promise<void> {
   const showMainSurfaces = () => {
     island?.showInactive();
     companion?.showInactive();
-    if (!stopFollow && companion) stopFollow = startCursorFollow(companion);
+    if (!companionCtl && companion) {
+      companionCtl = createCompanionController(companion);
+    }
   };
 
   // ---- IPC : enregistré AVANT les fenêtres (les renderers appellent
@@ -166,6 +179,22 @@ async function main(): Promise<void> {
     ensureStatusLoop();
   });
 
+  // Exécuteur de guides : purement géométrique, aucun appel IA par étape.
+  const guideRunner = createGuideRunner({
+    cursor: () => screen.getCursorScreenPoint(),
+    showPoint: (xPct, yPct, bounds) => {
+      if (pointer) showPointerAt(pointer, xPct, yPct, bounds, { sticky: true });
+    },
+    hidePoint: () => {
+      if (pointer) hidePointer(pointer);
+    },
+    flyTo: (target) => companionCtl?.flyTo(target),
+    hold: () => companionCtl?.hold(),
+    follow: () => companionCtl?.follow(),
+    onMouseDown: onGlobalMouseDown,
+    clicksAvailable: mouseHookAvailable,
+  });
+
   machine = createSessionMachine({
     broadcast: (payload) => {
       sendTo(island, CH.state, payload);
@@ -178,7 +207,18 @@ async function main(): Promise<void> {
     transcribe,
     sttReady,
     screenGranted,
-    chat: (opts) => chat({ ...opts, onStatus: (s) => tui.chatStatus(s) }),
+    // SUNFLOWER_FAKE_ANSWER (dev) : rejoue un texte comme si le modèle le
+    // streamait — test du parseur/guide de bout en bout sans Ollama.
+    chat: process.env["SUNFLOWER_FAKE_ANSWER"]
+      ? async (opts) => {
+          const text = process.env["SUNFLOWER_FAKE_ANSWER"] as string;
+          for (const piece of text.match(/.{1,8}/gs) ?? []) {
+            opts.onToken(piece);
+            await new Promise((r) => setTimeout(r, 25));
+          }
+          return text;
+        }
+      : (opts) => chat({ ...opts, onStatus: (s) => tui.chatStatus(s) }),
     answerReset: () => sendTo(companion, CH.answerReset),
     answerToken: (text) => {
       sendTo(companion, CH.answerToken, text);
@@ -196,6 +236,12 @@ async function main(): Promise<void> {
     },
     hidePoint: () => {
       if (pointer) hidePointer(pointer);
+    },
+    guideStart: (guide, display, cb) => guideRunner.start(guide, display, cb),
+    guideCancel: () => guideRunner.cancel(),
+    guideStep: (payload) => {
+      sendTo(companion, CH.guideStep, payload);
+      tui.guideStep(payload.index, payload.total, payload.text);
     },
   });
 
@@ -264,7 +310,7 @@ async function main(): Promise<void> {
     quitting = true;
     tui.dispose();
     machine?.interrupt();
-    stopFollow?.();
+    companionCtl?.dispose();
     stopHotkey();
     void freeStt();
   });
