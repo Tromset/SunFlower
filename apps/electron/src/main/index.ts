@@ -3,7 +3,7 @@ import { CH, type MicDataPayload, type MicErrorCode } from "../shared/ipc";
 import type { PanelData, PermissionId } from "../shared/state";
 import { getConfig, setConfig } from "./config-store";
 import { hotkeyAvailable, initHotkey, stopHotkey } from "./hotkey";
-import { chat, checkOllama } from "./ollama";
+import { chat, checkOllama, warmModel } from "./ollama";
 import {
   permissionStatuses,
   requestPermission,
@@ -23,6 +23,7 @@ import {
   transcribe,
 } from "./stt";
 import { createTray, trayBounds } from "./tray";
+import { createTui, type TuiStatusInfo } from "./tui";
 import { createCompanionWindow, startCursorFollow } from "./windows/companion";
 import { createIslandWindow } from "./windows/island";
 import { createOnboardingWindow } from "./windows/onboarding";
@@ -43,6 +44,20 @@ if (!gotLock) {
 async function main(): Promise<void> {
   await app.whenReady();
   if (process.platform === "darwin") app.dock?.hide();
+
+  // Interface terminal (bannière, phases, saisie clavier). Sans TTY, simple
+  // logs préfixés — l'app packagée ne change pas.
+  const tui = createTui();
+  const tuiInfo = (d: PanelData): TuiStatusInfo => ({
+    host: d.model.host,
+    model: d.model.name,
+    reachable: d.model.reachable,
+    pulled: d.model.pulled,
+    whisperModel: d.stt.model,
+    sttStatus: d.stt.status,
+    hotkeyAvailable: d.hotkeyAvailable,
+    version: d.version,
+  });
 
   let island: BrowserWindow | null = null;
   let companion: BrowserWindow | null = null;
@@ -91,7 +106,11 @@ async function main(): Promise<void> {
       }
     }, 3000);
   };
-  onSttChange(() => void pushStatus());
+  // onSttChange est mono-abonné : étendre CE callback, pas en ajouter un.
+  onSttChange(() => {
+    void pushStatus();
+    tui.refreshStt(sttState());
+  });
 
   const showMainSurfaces = () => {
     island?.showInactive();
@@ -151,6 +170,7 @@ async function main(): Promise<void> {
     broadcast: (payload) => {
       sendTo(island, CH.state, payload);
       sendTo(companion, CH.state, payload);
+      tui.state(payload);
     },
     micStart: () => sendTo(island, CH.micStart),
     micStop: () => sendTo(island, CH.micStop),
@@ -158,11 +178,19 @@ async function main(): Promise<void> {
     transcribe,
     sttReady,
     screenGranted,
-    chat,
+    chat: (opts) => chat({ ...opts, onStatus: (s) => tui.chatStatus(s) }),
     answerReset: () => sendTo(companion, CH.answerReset),
-    answerToken: (text) => sendTo(companion, CH.answerToken, text),
-    answerDone: (full) => sendTo(companion, CH.answerDone, full),
+    answerToken: (text) => {
+      sendTo(companion, CH.answerToken, text);
+      tui.answerToken(text);
+    },
+    answerDone: (full) => {
+      sendTo(companion, CH.answerDone, full);
+      tui.answerDone();
+    },
     ttsStop: () => sendTo(companion, CH.ttsStop),
+    onQuestion: (q, source) => tui.question(q, source),
+    onSessionError: (ctx, err) => tui.sessionError(ctx, err),
     showPoint: (point, display) => {
       if (pointer) showPointerAt(pointer, point.xPct, point.yPct, display.bounds);
     },
@@ -182,7 +210,11 @@ async function main(): Promise<void> {
   // Pas de push-to-talk tant que l'accueil n'est pas terminé.
   initHotkey({
     onDown: () => {
-      if (!onboarding) machine?.hotkeyDown();
+      if (!onboarding) {
+        // Le modèle se charge pendant que l'utilisateur parle.
+        warmModel();
+        machine?.hotkeyDown();
+      }
     },
     onUp: () => {
       if (!onboarding) machine?.hotkeyUp();
@@ -206,6 +238,19 @@ async function main(): Promise<void> {
     void ensureStt();
   }
 
+  // ---- Terminal : bannière, préchauffage du modèle, prompt -------------
+  void (async () => {
+    const data = await buildPanelData();
+    tui.banner(tuiInfo(data));
+    if (data.model.reachable && data.model.pulled) warmModel();
+    tui.startRepl({
+      submit: (q) => (onboarding ? false : (machine?.askText(q) ?? false)),
+      interrupt: () => machine?.interrupt(),
+      quit: () => app.quit(),
+      isBusy: () => machine?.busy() ?? false,
+    });
+  })();
+
   // ---- Cycle de vie ----------------------------------------------------
   app.on("second-instance", () => {
     const bounds = trayBounds();
@@ -217,6 +262,7 @@ async function main(): Promise<void> {
   app.on("before-quit", () => {
     if (quitting) return;
     quitting = true;
+    tui.dispose();
     machine?.interrupt();
     stopFollow?.();
     stopHotkey();
