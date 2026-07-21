@@ -1,4 +1,5 @@
 import { desktopCapturer, screen, type Display } from "electron";
+import { getConfig, setConfig } from "./config-store";
 
 export interface Screenshot {
   imageB64: string;
@@ -20,6 +21,10 @@ export async function captureScreenAtCursor(): Promise<Screenshot | null> {
     const source =
       sources.find((s) => s.display_id === String(display.id)) ?? sources[0];
     if (!source || source.thumbnail.isEmpty()) return null;
+    // Une capture réussie prouve que « contenu d'écran » fonctionne.
+    if (!getConfig().screenCaptureConfirmed) {
+      setConfig({ screenCaptureConfirmed: true });
+    }
     return {
       imageB64: source.thumbnail.toJPEG(80).toString("base64"),
       display,

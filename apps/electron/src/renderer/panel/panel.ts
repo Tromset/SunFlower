@@ -28,6 +28,12 @@ function renderPermissions(data: PanelData): void {
     row.classList.toggle("granted", granted);
     row.querySelector(".perm-status")!.innerHTML =
       `<span class="dot"></span>${granted ? "granted" : "not granted"}`;
+    // Screen recording needs a relaunch after the macOS grant.
+    if (id === "screen") {
+      row.title = granted
+        ? ""
+        : "checked in System Settings? quit and relaunch sunflower.";
+    }
   }
 }
 
