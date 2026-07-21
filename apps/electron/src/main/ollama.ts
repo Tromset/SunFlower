@@ -72,6 +72,71 @@ async function resolveModel(): Promise<string> {
   return status.pulled ? status.name : getConfig().ollamaModel;
 }
 
+const FIRST_TOKEN_WARM_MS = 45_000; // modèle déjà en mémoire
+const FIRST_TOKEN_COLD_MS = 180_000; // chargement à froid (disque → RAM/VRAM)
+const INTER_TOKEN_MS = 30_000; // silence entre tokens
+const KEEP_ALIVE = "10m";
+// Contexte : capture (~600-2500 tokens visuels qwen3-vl) + prompt + 300 tokens
+// de réponse. Le défaut Ollama (4096) tronque silencieusement ; 32768 (variante
+// serveur, multi-tours + outils) gonflerait RAM et temps de chargement pour
+// rien en mono-tour.
+const NUM_CTX = 8192;
+
+/** GET /api/ps — le modèle est-il déjà chargé ? Toute erreur ⇒ froid. */
+async function isModelLoaded(model: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${ollamaHost()}/api/ps`, {
+      signal: AbortSignal.timeout(1500),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as {
+      models?: { name?: string; model?: string }[];
+    };
+    return (data.models ?? []).some((m) =>
+      sameModel(m.name ?? m.model ?? "", model),
+    );
+  } catch {
+    return false;
+  }
+}
+
+let warming: Promise<void> | null = null;
+let warmedAt = 0;
+
+/**
+ * Précharge le modèle sans le solliciter (messages vide : pattern officiel
+ * Ollama, répond dès que le modèle est en mémoire). Fire-and-forget :
+ * dédupliqué, throttlé 30 s, silencieux en cas d'échec. Le num_ctx doit être
+ * identique à celui des vraies requêtes, sinon Ollama redémarre le runner à
+ * la première question et le préchauffage est perdu.
+ */
+export function warmModel(): void {
+  if (warming || Date.now() - warmedAt < 30_000) return;
+  warming = (async () => {
+    try {
+      const model = await resolveModel();
+      const res = await fetch(`${ollamaHost()}/api/chat`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: AbortSignal.timeout(FIRST_TOKEN_COLD_MS),
+        body: JSON.stringify({
+          model,
+          messages: [],
+          stream: false,
+          keep_alive: KEEP_ALIVE,
+          options: { num_ctx: NUM_CTX },
+        }),
+      });
+      if (res.ok) warmedAt = Date.now();
+      await res.text().catch(() => "");
+    } catch {
+      // jamais bloquant, jamais bruyant
+    } finally {
+      warming = null;
+    }
+  })();
+}
+
 const SYSTEM_PROMPT = [
   "You are sunflower, a calm, unobtrusive screen companion that runs entirely locally on the user's Mac.",
   "The attached image is their current screen; their question was dictated by voice, so it may contain small transcription errors.",
@@ -121,16 +186,24 @@ function createThinkStripper(): (chunk: string) => string {
   };
 }
 
+/** Statut émis pendant la préparation de la requête. */
+export type ChatStatus = "loading-model";
+
 export interface ChatOptions {
   question: string;
   imageB64: string;
   signal: AbortSignal;
   onToken: (text: string) => void;
+  /** Avancement notable avant le premier token (ex. chargement à froid). */
+  onStatus?: (status: ChatStatus) => void;
 }
 
 /** Stream la réponse ; résout avec le texte complet (marqueurs inclus). */
 export async function chat(opts: ChatOptions): Promise<string> {
   const model = await resolveModel();
+  // À froid, le premier token peut mettre plusieurs minutes (chargement du
+  // modèle) : budget large + statut visible au lieu d'un échec à 60 s.
+  const warm = await isModelLoaded(model);
   const ctrl = new AbortController();
   let timedOut = false;
   const onExternalAbort = () => ctrl.abort();
@@ -146,7 +219,8 @@ export async function chat(opts: ChatOptions): Promise<string> {
   const strip = createThinkStripper();
   let full = "";
   try {
-    arm(60_000); // démarrage à froid du modèle
+    if (!warm) opts.onStatus?.("loading-model");
+    arm(warm ? FIRST_TOKEN_WARM_MS : FIRST_TOKEN_COLD_MS);
     const res = await fetch(`${ollamaHost()}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -155,8 +229,8 @@ export async function chat(opts: ChatOptions): Promise<string> {
         model,
         stream: true,
         think: false,
-        keep_alive: "10m",
-        options: { temperature: 0.4, num_predict: 300 },
+        keep_alive: KEEP_ALIVE,
+        options: { temperature: 0.4, num_predict: 300, num_ctx: NUM_CTX },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           {
@@ -181,7 +255,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      arm(30_000); // silence entre tokens
+      arm(INTER_TOKEN_MS);
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
@@ -211,10 +285,13 @@ export async function chat(opts: ChatOptions): Promise<string> {
     if (err instanceof OllamaFailure) throw err;
     if (opts.signal.aborted && !timedOut) throw new OllamaUserInterrupt();
     if (timedOut) {
+      if (full.length > 0) {
+        throw new OllamaFailure("the model stopped mid-answer.");
+      }
       throw new OllamaFailure(
-        full.length > 0
-          ? "the model stopped mid-answer."
-          : "the model isn't responding.",
+        warm
+          ? "the model isn't responding."
+          : `the model is still loading — warm it with: ollama run ${model}`,
       );
     }
     throw new OllamaFailure("ollama can't be reached — run ollama serve.");
