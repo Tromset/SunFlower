@@ -85,6 +85,17 @@ macOS permissions (requested during onboarding, all grants go to the Electron bi
 
 Screen recording has a macOS quirk: its Settings pane only lists an app *after* the app has attempted a capture (there is no "+" button). Sunflower's first "grant" click triggers that attempt so the app registers itself and the system prompt appears; a second click opens the now-populated Settings pane. In dev the entry is named **Electron** (grants go to the Electron binary). After you tick the box, macOS offers to "Quit & Reopen" — choose **Later** and rerun `npm start` yourself, because the auto-relaunch starts a bare Electron without sunflower's app path. The grant survives the relaunch.
 
+### The terminal
+
+When launched from a terminal (`npm start` or `sunflower`), sunflower turns it into a first-class interface:
+
+- A startup banner shows the Ollama host and model, whisper status, and the hotkey — with the fix printed in red when something is missing (`ollama serve`, `ollama pull …`).
+- **Type a question at the `❯` prompt** — it takes a screenshot at your cursor and runs the exact same pipeline as voice: the answer streams into the terminal *and* into the companion bubble with speech. Typing works even while whisper is still downloading.
+- Voice sessions render live too: `listening…`, `looking at your screen…`, your transcribed question, a spinner while the model thinks, then the streamed answer with its duration.
+- On a cold start the spinner says `waking the model…` instead of failing — sunflower preloads the model when the app launches and again the moment you start speaking, and allows up to ~3 minutes for the first token of a cold load.
+- **Ctrl+C** interrupts the current answer; at an idle prompt it quits the app. Set `SUNFLOWER_DEBUG=1` for full error details.
+- Without a TTY (packaged app, redirected output) all of this degrades to plain `[sunflower]` log lines — nothing else changes.
+
 ## Prerequisites
 
 - macOS with Xcode installed
@@ -287,7 +298,7 @@ If you do this, **put authentication in front of Ollama.** The Ollama API has no
 
 **Integrations never fire.** The model has no `tools` capability. `ollama show <model>` will tell you.
 
-**First reply is very slow.** Ollama loads the model into memory on first use. Warm it with `ollama run <model>` before starting a session.
+**First reply is very slow.** Ollama loads the model into memory on first use. The Electron app now preloads it at launch and when you start speaking, shows `waking the model…` while it loads, and waits up to ~3 minutes for a cold first token (45 s once warm). If it still times out — `the model is still loading` — warm it manually with `ollama run <model>` or switch to a smaller vision model such as `minicpm-v`.
 
 **The app connects but answers come back empty.** This is almost always Ollama-side: the configured model isn't pulled, or Ollama isn't running. `/chat` still responds HTTP 200 in that case — the error travels *inside* the stream as an `error` event, which the app currently doesn't display. Check the Worker logs (`pnpm run dev:server` prints the Ollama error, e.g. `model 'qwen3-vl:8b' not found`), confirm Ollama is up (`curl http://localhost:11434/api/tags`), and confirm `OLLAMA_MODEL` names a model you have actually pulled — Ollama does not pull on demand.
 

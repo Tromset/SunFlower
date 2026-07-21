@@ -16,6 +16,9 @@ import {
 } from "./point-parser";
 import type { Screenshot } from "./screenshot";
 
+/** Source d'une question : dictée au micro ou tapée dans le terminal. */
+export type QuestionSource = "voice" | "typed";
+
 export interface MachineDeps {
   broadcast(payload: StatePayload): void;
   micStart(): void;
@@ -31,6 +34,10 @@ export interface MachineDeps {
   ttsStop(): void;
   showPoint(point: PointEvent, display: Display): void;
   hidePoint(): void;
+  /** Question prête à partir (affichage terminal). */
+  onQuestion?(question: string, source: QuestionSource): void;
+  /** Détail d'une erreur de session (diagnostic terminal). */
+  onSessionError?(context: "transcription" | "ollama", err: unknown): void;
 }
 
 export interface SessionMachine {
@@ -40,6 +47,11 @@ export interface SessionMachine {
   onMicError(code: MicErrorCode): void;
   onTtsEnded(): void;
   interrupt(): void;
+  /** Question tapée au terminal : capture immédiate puis pipeline partagé
+   *  (sans STT). Retourne false si vide ou si une session est en cours. */
+  askText(question: string): boolean;
+  /** Une session est-elle en cours ? (décision Ctrl+C du terminal) */
+  busy(): boolean;
 }
 
 const MIN_HOLD_MS = 300;
@@ -108,7 +120,7 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
     try {
       question = await deps.transcribe(pcm, sampleRate);
     } catch (err) {
-      console.error("[sunflower] transcription:", err);
+      deps.onSessionError?.("transcription", err);
       if (id === seq) fail("transcription failed.");
       return;
     }
@@ -117,7 +129,17 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
       fail("I didn't hear anything.");
       return;
     }
-    console.log(`[sunflower] question: ${question}`);
+    await runQuestion(id, question, shot, "voice");
+  };
+
+  /** Cœur partagé voix/clavier : stream Ollama → parseur POINT → réponse. */
+  const runQuestion = async (
+    id: number,
+    question: string,
+    shot: Screenshot,
+    source: QuestionSource,
+  ) => {
+    deps.onQuestion?.(question, source);
     phase = "thinking";
     deps.broadcast({ island: "thinking", pose: "thinking" });
     deps.answerReset();
@@ -170,7 +192,7 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
       }, TTS_FAILSAFE_MS);
     } catch (err) {
       if (id !== seq || err instanceof OllamaUserInterrupt) return;
-      console.error("[sunflower] ollama:", err);
+      deps.onSessionError?.("ollama", err);
       fail(
         err instanceof OllamaFailure
           ? err.userMessage
@@ -247,6 +269,32 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
       seq++;
       interrupt();
       toIdle();
+    },
+    askText(question) {
+      const q = question.trim();
+      if (!q || phase !== "idle") return false;
+      if (!deps.screenGranted()) {
+        fail("allow screen recording in the sunflower panel.");
+        return true; // pris en charge : l'erreur s'affiche
+      }
+      const id = ++seq;
+      clearTimers();
+      phase = "processing";
+      deps.broadcast({ island: "reading", pose: "thinking" });
+      // Capture immédiate, sans toucher capturePromise/micSeen (voie vocale).
+      void (async () => {
+        const shot = await deps.capture();
+        if (id !== seq) return;
+        if (!shot) {
+          fail("screen capture failed — check the permission.");
+          return;
+        }
+        await runQuestion(id, q, shot, "typed");
+      })();
+      return true;
+    },
+    busy() {
+      return phase !== "idle";
     },
   };
 }
