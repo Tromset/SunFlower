@@ -3,7 +3,7 @@ import { CH, type MicDataPayload, type MicErrorCode } from "../shared/ipc";
 import type { PanelData, PermissionId } from "../shared/state";
 import { getConfig, setConfig } from "./config-store";
 import { hotkeyAvailable, initHotkey, stopHotkey } from "./hotkey";
-import { chat, checkOllama, warmModel } from "./ollama";
+import { chat, checkOllama, onContextReset, warmModel } from "./ollama";
 import {
   permissionStatuses,
   requestPermission,
@@ -111,6 +111,8 @@ async function main(): Promise<void> {
     void pushStatus();
     tui.refreshStt(sttState());
   });
+  // Budget de contexte atteint : le tchat repart de zéro, dire pourquoi.
+  onContextReset((tokens) => tui.contextReset(tokens));
 
   const showMainSurfaces = () => {
     island?.showInactive();
