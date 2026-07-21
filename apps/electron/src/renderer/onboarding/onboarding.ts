@@ -38,11 +38,20 @@ nextBtn.addEventListener("click", () => {
 });
 
 // ---- permissions (step 02) ---------------------------------------------
+// Once screen recording has been requested, remind the user to relaunch
+// after ticking the box in Settings (a macOS constraint).
+let screenAsked = false;
+const screenHint = document.querySelector<HTMLElement>(
+  '.perm-item[data-perm="screen"] .perm-hint',
+);
 for (const item of document.querySelectorAll<HTMLElement>(".perm-item")) {
   item.querySelector(".perm-action")!.addEventListener("click", () => {
-    void window.sunflower.requestPermission(
-      item.dataset["perm"] as PermissionId,
-    );
+    const id = item.dataset["perm"] as PermissionId;
+    if ((id === "screen" || id === "screenContent") && screenHint) {
+      screenAsked = true;
+      screenHint.hidden = false;
+    }
+    void window.sunflower.requestPermission(id);
   });
 }
 
@@ -81,6 +90,10 @@ function render(data: PanelData): void {
     } else if (!granted && existing) {
       existing.remove();
     }
+  }
+  // The relaunch reminder disappears once screen recording is granted.
+  if (screenHint) {
+    screenHint.hidden = !screenAsked || data.permissions.screen === "granted";
   }
   // step 03
   setCheck(

@@ -65,6 +65,7 @@ export function ensureBridge(): void {
         ollamaHost: "http://localhost:11434",
         ollamaModel: "qwen3-vl:8b",
         whisperModel: "ggml-small-q5_1.bin",
+        screenCaptureConfirmed: true,
       }),
     setConfig: (patch) =>
       Promise.resolve({
@@ -72,6 +73,7 @@ export function ensureBridge(): void {
         ollamaHost: "http://localhost:11434",
         ollamaModel: "qwen3-vl:8b",
         whisperModel: "ggml-small-q5_1.bin",
+        screenCaptureConfirmed: true,
         ...patch,
       }),
     downloadWhisper: () => Promise.resolve(),
