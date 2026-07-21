@@ -79,7 +79,8 @@ body {
 #dots span {
   width: 5px;
   height: 5px;
-  background: var(--yellow);
+  border-radius: 50%;
+  background: rgba(252, 210, 50, 0.12);
   animation: sfDots 1.4s ease-in-out infinite;
 }
 #dots span:nth-child(2) {
@@ -107,6 +108,7 @@ body {
 .state-thinking #label,
 .state-acting #label,
 .state-answering #label,
+.state-guiding #label,
 .state-error #label {
   display: inline;
 }

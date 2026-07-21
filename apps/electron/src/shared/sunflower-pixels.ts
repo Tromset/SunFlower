@@ -30,7 +30,6 @@ const G1 = "#458149"; // light stem
 const G2 = "#3C6E41"; // dark stem
 const G3 = "#325A38"; // base
 const O = "#D97757"; // clay accent
-const INK = "#141413";
 const HL = "#F6E3D7"; // reading glint
 
 /** Base flower (idle pose), viewBox 8×9. */
@@ -104,27 +103,26 @@ export const POSES = {
   },
 } satisfies Record<string, PixelArt>;
 
-/** Orange menu-bar variant (surface 1a). */
+/** Menu-bar icon using the proper sunflower palette (yellow petals, brown core, green stem). */
 function menubarArt(core: string): PixelArt {
   return {
     vb: [8, 9],
     layers: [
       {
         rects: [
-          { x: 2, y: 0, w: 4, h: 2, c: O },
-          { x: 0, y: 2, w: 8, h: 2, c: O },
-          { x: 2, y: 4, w: 4, h: 1, c: O },
+          { x: 2, y: 0, w: 4, h: 2, c: Y },
+          { x: 0, y: 2, w: 8, h: 2, c: Y },
+          { x: 2, y: 4, w: 4, h: 1, c: Y },
           { x: 3, y: 2, w: 2, h: 2, c: core },
-          { x: 3, y: 5, w: 1, h: 3, c: O },
-          { x: 4, y: 5, w: 1, h: 3, c: O },
+          { x: 3, y: 5, w: 1, h: 3, c: G1 },
+          { x: 4, y: 5, w: 1, h: 3, c: G2 },
         ],
       },
     ],
   };
 }
-export const MENUBAR: PixelArt = menubarArt(INK);
-/** Dark menu bar: an ink core would vanish — use a cream core. */
-export const MENUBAR_DARK: PixelArt = menubarArt("#FEF9ED");
+export const MENUBAR: PixelArt = menubarArt(B);
+export const MENUBAR_DARK: PixelArt = menubarArt(B);
 
 /** Field sunflower (footers 1a/1e) — simple stem. */
 export const FIELD: PixelArt = {

@@ -43,6 +43,16 @@ body.flip #row {
   box-shadow: var(--shadow-panel-overlay);
 }
 
+#step-badge {
+  display: block;
+  font-size: 11px;
+  color: var(--text-on-dark-mute);
+  margin-bottom: 4px;
+}
+#step-badge[hidden] {
+  display: none;
+}
+
 #bubble-text {
   font-size: 13.5px;
   line-height: 1.55;

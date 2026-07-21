@@ -19,6 +19,7 @@ export function showPointerAt(
   xPct: number,
   yPct: number,
   displayBounds: Electron.Rectangle,
+  opts?: { sticky?: boolean },
 ): void {
   const x = Math.round(
     displayBounds.x + (xPct / 100) * displayBounds.width - POINTER_W / 2,
@@ -29,8 +30,12 @@ export function showPointerAt(
   win.setBounds({ x, y, width: POINTER_W, height: POINTER_H });
   win.webContents.send(CH.pointShow);
   win.showInactive();
-  if (hideTimer) clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => hidePointer(win), POINTER_MS);
+  if (hideTimer) {
+    clearTimeout(hideTimer);
+    hideTimer = null;
+  }
+  // sticky (étape de guide) : visible jusqu'à hidePointer explicite.
+  if (!opts?.sticky) hideTimer = setTimeout(() => hidePointer(win), POINTER_MS);
 }
 
 export function hidePointer(win: BrowserWindow): void {

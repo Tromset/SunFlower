@@ -1,6 +1,7 @@
-// Détection globale du maintien/relâchement de ⌃⌥ via uiohook-napi.
-// Chargement défensif : sans le module natif ou sans la permission
-// Accessibilité, l'app tourne quand même (hotkey indisponible).
+// Détection globale du maintien/relâchement de ⌃⌥ via uiohook-napi, plus
+// les clics souris globaux (avancement des guides). Chargement défensif :
+// sans le module natif ou sans la permission Accessibilité, l'app tourne
+// quand même (hotkey et clics indisponibles).
 import { systemPreferences } from "electron";
 
 interface UiohookEvent {
@@ -9,6 +10,7 @@ interface UiohookEvent {
 interface UiohookModule {
   uIOhook: {
     on(event: "keydown" | "keyup", cb: (e: UiohookEvent) => void): void;
+    on(event: "mousedown", cb: () => void): void;
     start(): void;
     stop(): void;
   };
@@ -19,9 +21,23 @@ let mod: UiohookModule | null = null;
 let loadFailed = false;
 let started = false;
 let retryTimer: NodeJS.Timeout | null = null;
+const mouseSubs = new Set<() => void>();
 
 export function hotkeyAvailable(): boolean {
   return started;
+}
+
+/** Le hook souris partage le cycle de vie du hook clavier. */
+export function mouseHookAvailable(): boolean {
+  return started;
+}
+
+/** Abonnement aux clics globaux (signal seul — la position vient d'Electron). */
+export function onGlobalMouseDown(cb: () => void): () => void {
+  mouseSubs.add(cb);
+  return () => {
+    mouseSubs.delete(cb);
+  };
 }
 
 export function initHotkey(handlers: {
@@ -59,6 +75,9 @@ export function initHotkey(handlers: {
       active = false;
       handlers.onUp();
     }
+  });
+  mod.uIOhook.on("mousedown", () => {
+    for (const cb of mouseSubs) cb();
   });
   if (!tryStart()) {
     retryTimer = setInterval(() => {

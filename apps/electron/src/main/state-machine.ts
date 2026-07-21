@@ -1,19 +1,22 @@
-// Session orchestrator: idle → listening → reading → thinking → answering.
-// One flight at a time (monotonic sessionId); every async continuation
-// checks it is not stale before acting.
+// Session orchestrator: idle → listening → reading → thinking → answering,
+// plus guiding when the model returns a step plan. One flight at a time
+// (monotonic sessionId); every async continuation checks it is not stale
+// before acting.
 import type { Display } from "electron";
 import type { AppPhase, StatePayload } from "../shared/state";
-import type { MicErrorCode } from "../shared/ipc";
+import type { GuideStepPayload, MicErrorCode } from "../shared/ipc";
 import {
   OllamaFailure,
   OllamaUserInterrupt,
   type ChatOptions,
 } from "./ollama";
 import {
-  createPointParser,
-  stripPointMarkers,
+  createAnswerParser,
+  stripMarkers,
+  type ParsedGuide,
   type PointEvent,
-} from "./point-parser";
+} from "./guide-parser";
+import type { GuideCallbacks } from "./guide-runner";
 import type { Screenshot } from "./screenshot";
 
 /** Source d'une question : dictée au micro ou tapée dans le terminal. */
@@ -34,6 +37,12 @@ export interface MachineDeps {
   ttsStop(): void;
   showPoint(point: PointEvent, display: Display): void;
   hidePoint(): void;
+  /** Lance l'exécution scriptée d'un plan de guide (guide-runner). */
+  guideStart(guide: ParsedGuide, display: Display, cb: GuideCallbacks): void;
+  /** Annule le guide en cours (idempotent). */
+  guideCancel(): void;
+  /** Étape annoncée : bulle + voix du compagnon, ligne terminal. */
+  guideStep(payload: GuideStepPayload): void;
   /** Question prête à partir (affichage terminal). */
   onQuestion?(question: string, source: QuestionSource): void;
   /** Détail d'une erreur de session (diagnostic terminal). */
@@ -48,7 +57,8 @@ export interface SessionMachine {
   onTtsEnded(): void;
   interrupt(): void;
   /** Question tapée au terminal : capture immédiate puis pipeline partagé
-   *  (sans STT). Retourne false si vide ou si une session est en cours. */
+   *  (sans STT). Retourne false si vide ou si une session est en cours —
+   *  sauf pendant un guide, qu'elle annule pour repartir normalement. */
   askText(question: string): boolean;
   /** Une session est-elle en cours ? (décision Ctrl+C du terminal) */
   busy(): boolean;
@@ -88,7 +98,8 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
     const id = ++seq;
     phase = "idle";
     clearTimers();
-    // Voice and pointer must never survive an error.
+    // Voice, pointer and guide must never survive an error.
+    deps.guideCancel();
     deps.ttsStop();
     deps.hidePoint();
     deps.broadcast({ island: "error", pose: "idle", message });
@@ -100,6 +111,7 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
   const interrupt = () => {
     abort?.abort();
     abort = null;
+    deps.guideCancel();
     deps.ttsStop();
     deps.hidePoint();
     clearTimers();
@@ -144,7 +156,7 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
     deps.broadcast({ island: "thinking", pose: "thinking" });
     deps.answerReset();
     abort = new AbortController();
-    const parser = createPointParser({
+    const parser = createAnswerParser({
       onText: (text) => {
         if (id === seq) deps.answerToken(text);
       },
@@ -182,7 +194,45 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
         fail("I couldn't find anything to say.");
         return;
       }
-      deps.answerDone(stripPointMarkers(full));
+      deps.answerDone(stripMarkers(full));
+      const guide = parser.guide();
+      if (guide) {
+        // Plan complet reçu : exécution scriptée, plus aucun appel IA.
+        phase = "guiding";
+        deps.guideStart(guide, shot.display, {
+          onStep: (index, total, step, cut) => {
+            if (id !== seq) return;
+            deps.broadcast({
+              island: "guiding",
+              pose: "pointing",
+              message: `step ${index} of ${total}`,
+            });
+            deps.guideStep({ index, total, text: step.text, cut });
+          },
+          onEnd: (reason) => {
+            if (id !== seq) return;
+            if (reason === "completed") {
+              // La clôture emprunte la voie normale de réponse.
+              phase = "responding";
+              deps.broadcast({ island: "answering", pose: "answering" });
+              deps.answerReset();
+              const bye = guide.outro ?? "All done.";
+              deps.answerToken(bye);
+              deps.answerDone(bye);
+              failsafeTimer = setTimeout(() => {
+                if (id === seq) {
+                  deps.ttsStop();
+                  toIdle();
+                }
+              }, TTS_FAILSAFE_MS);
+            } else {
+              deps.ttsStop();
+              toIdle();
+            }
+          },
+        });
+        return;
+      }
       phase = "responding";
       failsafeTimer = setTimeout(() => {
         if (id === seq) {
@@ -272,7 +322,9 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
     },
     askText(question) {
       const q = question.trim();
-      if (!q || phase !== "idle") return false;
+      if (!q || (phase !== "idle" && phase !== "guiding")) return false;
+      // Une question tapée en plein guide l'annule et repart normalement.
+      if (phase === "guiding") interrupt();
       if (!deps.screenGranted()) {
         fail("allow screen recording in the sunflower panel.");
         return true; // pris en charge : l'erreur s'affiche

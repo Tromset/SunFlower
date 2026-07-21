@@ -76,11 +76,15 @@ const FIRST_TOKEN_WARM_MS = 45_000; // modèle déjà en mémoire
 const FIRST_TOKEN_COLD_MS = 180_000; // chargement à froid (disque → RAM/VRAM)
 const INTER_TOKEN_MS = 30_000; // silence entre tokens
 const KEEP_ALIVE = "10m";
-// Contexte : capture (~600-2500 tokens visuels qwen3-vl) + prompt + 300 tokens
-// de réponse. Le défaut Ollama (4096) tronque silencieusement ; 32768 (variante
-// serveur, multi-tours + outils) gonflerait RAM et temps de chargement pour
-// rien en mono-tour.
+// Contexte : capture (~600-2500 tokens visuels qwen3-vl) + prompt + 700 tokens
+// de réponse (plafond NUM_PREDICT, atteint seulement par les plans de guide).
+// Le défaut Ollama (4096) tronque silencieusement ; 32768 (variante serveur,
+// multi-tours + outils) gonflerait RAM et temps de chargement pour rien en
+// mono-tour.
 const NUM_CTX = 8192;
+// Réponses courtes (1-3 phrases) ou plan de guide (≤ 8 lignes d'étapes +
+// intro/clôture ≈ 450 tokens) : 700 laisse de la marge sans rien coûter.
+const NUM_PREDICT = 700;
 
 /** GET /api/ps — le modèle est-il déjà chargé ? Toute erreur ⇒ froid. */
 async function isModelLoaded(model: string): Promise<boolean> {
@@ -186,8 +190,15 @@ const SYSTEM_PROMPT = [
   "You are sunflower, a calm, unobtrusive screen companion that runs entirely locally on the user's Mac.",
   "The attached image is their current screen; their question was dictated by voice, so it may contain small transcription errors.",
   "Answer in English, in one to three short, warm sentences. No lists, no emoji, no markdown, no code.",
-  "If — and only if — pointing at ONE precise element on screen genuinely helps, end your answer with the exact marker [POINT:x%,y%] where x and y are the coordinates of that element's center as a percentage of the screen width and height.",
-  "Never mention this marker or any coordinates in your text.",
+  "If — and only if — pointing at ONE precise element on screen genuinely helps a simple answer, end it with the exact marker [POINT:x%,y%] where x and y are the coordinates of that element's center as a percentage of the screen width and height.",
+  'GUIDE MODE: when the user asks HOW TO DO something that takes several mouse actions ("how do I...", "guide me", "where do I click to..."), do not describe the steps in prose.',
+  "Instead reply with one short intro sentence, then the full plan: one step per line, in the real order of the actions, at most 6 steps, each step being a marker followed by one short instruction of at most 12 words that will be read aloud.",
+  "Use [STEP:x%,y%] instruction — when the target is visible in the image; x,y is its center. The guide advances when the user's mouse reaches it.",
+  "Use [STEP:x%,y%:click] instruction — when the exact target is not on screen yet (it will appear in a menu, dialog or window); x,y is your best estimate of where it will appear. The guide advances when the user clicks.",
+  "Use [STEP:click] instruction — when no position can be estimated at all. The guide advances when the user clicks.",
+  "After the last step write [DONE] followed by one short closing sentence.",
+  "Example: Let's import your video together. [STEP:12%,8%] Click the File menu. [STEP:14%,16%:click] Click Import in the menu that opens. [STEP:click] Double-click your video in the file dialog. [DONE] That's it, your video is imported.",
+  "Never mention the markers, the step numbers, or any coordinates in your text.",
 ].join(" ");
 
 /** Supprime en flux les blocs <think>…</think> (défensif). */
@@ -275,7 +286,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
         stream: true,
         think: false,
         keep_alive: KEEP_ALIVE,
-        options: { temperature: 0.4, num_predict: 300, num_ctx: NUM_CTX },
+        options: { temperature: 0.4, num_predict: NUM_PREDICT, num_ctx: NUM_CTX },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           {

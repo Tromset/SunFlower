@@ -50,6 +50,8 @@ export interface Tui {
   answerDone(): void;
   /** Budget de contexte atteint : un tchat neuf démarre. */
   contextReset(tokens: number): void;
+  /** Étape de guide annoncée (le prompt reste actif pendant un guide). */
+  guideStep(index: number, total: number, text: string): void;
   /** Détail d'erreur — visible seulement avec SUNFLOWER_DEBUG=1. */
   sessionError(context: string, err: unknown): void;
   /** Ligne libre, écrite proprement au-dessus du prompt/spinner. */
@@ -282,6 +284,17 @@ export function createTui(streams?: {
       case "acting":
         busyUi = true;
         break;
+      case "guiding":
+        // Prompt actif : taper une question annule le guide en cours.
+        busyUi = false;
+        stopSpinner();
+        if (streaming) {
+          out.write("\n");
+          streaming = false;
+        }
+        sawToken = false;
+        showPrompt();
+        break;
       case "error": {
         busyUi = true; // l'idle qui suit ramènera le prompt
         stopSpinner();
@@ -354,6 +367,15 @@ export function createTui(streams?: {
     writeLine(`${yellow("✦")} ${dim(label)}`);
   };
 
+  const guideStep = (index: number, total: number, text: string) => {
+    if (disposed) return;
+    if (!fancy) {
+      out.write(`[sunflower] step ${index}/${total}: ${text}\n`);
+      return;
+    }
+    writeLine(`${yellow("➤")} ${dim(`step ${index}/${total}`)} ${text}`);
+  };
+
   const sessionError = (context: string, err: unknown) => {
     // Le message utilisateur arrive via l'état « error » ; ici, seulement
     // le détail technique, sur demande.
@@ -423,6 +445,7 @@ export function createTui(streams?: {
     answerToken,
     answerDone,
     contextReset,
+    guideStep,
     sessionError,
     log: (line: string) => writeLine(line),
     startRepl,
