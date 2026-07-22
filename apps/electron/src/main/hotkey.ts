@@ -1,8 +1,10 @@
 // Détection globale du maintien/relâchement de ⌃⌥ via uiohook-napi, plus
-// les clics souris globaux (avancement des guides). Chargement défensif :
-// sans le module natif ou sans la permission Accessibilité, l'app tourne
-// quand même (hotkey et clics indisponibles).
+// les clics souris globaux (avancement des guides) et la garde de présence
+// (Sunflower Work — voir presence.ts). Chargement défensif : sans le module
+// natif ou sans la permission Accessibilité, l'app tourne quand même
+// (hotkey, clics et garde de présence indisponibles).
 import { systemPreferences } from "electron";
+import { noteGlobalInput } from "./presence";
 
 interface UiohookEvent {
   keycode: number;
@@ -10,7 +12,10 @@ interface UiohookEvent {
 interface UiohookModule {
   uIOhook: {
     on(event: "keydown" | "keyup", cb: (e: UiohookEvent) => void): void;
-    on(event: "mousedown", cb: () => void): void;
+    on(
+      event: "mousedown" | "mouseup" | "mousemove" | "wheel",
+      cb: () => void,
+    ): void;
     start(): void;
     stop(): void;
   };
@@ -59,6 +64,7 @@ export function initHotkey(handlers: {
   let alt = false;
   let active = false;
   mod.uIOhook.on("keydown", (e) => {
+    noteGlobalInput("keyboard");
     if (CTRL.has(e.keycode)) ctrl = true;
     else if (ALT.has(e.keycode)) alt = true;
     else return;
@@ -68,6 +74,7 @@ export function initHotkey(handlers: {
     }
   });
   mod.uIOhook.on("keyup", (e) => {
+    noteGlobalInput("keyboard");
     if (CTRL.has(e.keycode)) ctrl = false;
     else if (ALT.has(e.keycode)) alt = false;
     else return;
@@ -77,8 +84,14 @@ export function initHotkey(handlers: {
     }
   });
   mod.uIOhook.on("mousedown", () => {
+    noteGlobalInput("mouse");
     for (const cb of mouseSubs) cb();
   });
+  // Garde de présence seule : tout mouvement/molette/relâchement compte
+  // comme « l'utilisateur est là » (noteGlobalInput est très bon marché).
+  mod.uIOhook.on("mouseup", () => noteGlobalInput("mouse"));
+  mod.uIOhook.on("mousemove", () => noteGlobalInput("mouse"));
+  mod.uIOhook.on("wheel", () => noteGlobalInput("mouse"));
   if (!tryStart()) {
     retryTimer = setInterval(() => {
       if (tryStart() && retryTimer) {

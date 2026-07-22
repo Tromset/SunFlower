@@ -43,6 +43,11 @@ export interface MachineDeps {
   guideCancel(): void;
   /** Étape annoncée : bulle + voix du compagnon, ligne terminal. */
   guideStep(payload: GuideStepPayload): void;
+  /** Sunflower Work (pilotage souris/clavier) : opt-in de la config ? */
+  workEnabled(): boolean;
+  /** Confie une tâche [WORK:…] au work runner (voir work/runner.ts).
+   *  Faux = refusée (un run déjà en cours, garde de présence absente…). */
+  workStart(task: string): boolean;
   /** Question prête à partir (affichage terminal). */
   onQuestion?(question: string, source: QuestionSource): void;
   /** Détail d'une erreur de session (diagnostic terminal). */
@@ -192,6 +197,46 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
       parser.flush();
       if (!full.trim()) {
         fail("I couldn't find anything to say.");
+        return;
+      }
+      const work = parser.work();
+      if (work !== null) {
+        // Corvée d'ordinateur [WORK:…] : remise au work runner (opt-in,
+        // gardé par la présence). La session vocale, elle, se clôt sur la
+        // petite phrase d'annonce déjà streamée par le modèle.
+        phase = "responding";
+        if (!deps.workEnabled()) {
+          // Éteint par défaut : une phrase courte, et où l'allumer.
+          deps.answerReset();
+          const line =
+            "sunflower work is off — enable it from the tray menu and ask me again.";
+          deps.answerToken(line);
+          deps.answerDone(line);
+        } else if (!deps.workStart(work)) {
+          // Refus (run déjà en cours, garde indisponible…) : le dire, plutôt
+          // que d'acquiescer pour une tâche qui ne démarrera jamais.
+          deps.answerReset();
+          const line =
+            "I couldn't start that — I'm probably already on another errand. ask me again in a bit.";
+          deps.answerToken(line);
+          deps.answerDone(line);
+        } else {
+          const ack = stripMarkers(full);
+          if (ack) {
+            deps.answerDone(ack);
+          } else {
+            const line = "on it — I'll start as soon as you step away.";
+            deps.answerReset();
+            deps.answerToken(line);
+            deps.answerDone(line);
+          }
+        }
+        failsafeTimer = setTimeout(() => {
+          if (id === seq) {
+            deps.ttsStop();
+            toIdle();
+          }
+        }, TTS_FAILSAFE_MS);
         return;
       }
       deps.answerDone(stripMarkers(full));

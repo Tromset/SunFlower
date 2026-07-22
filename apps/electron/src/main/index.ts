@@ -3,6 +3,11 @@ import { CH, type MicDataPayload, type MicErrorCode } from "../shared/ipc";
 import type { PanelData, PermissionId, StatePayload } from "../shared/state";
 import type { AgentDecision } from "../shared/agents";
 import { createAgentRunner, type AgentRunner } from "./agents/runner";
+import {
+  createAgentOrbController,
+  createAgentOrbWindow,
+  type AgentOrbController,
+} from "./windows/agent-orb";
 import { getConfig, setConfig } from "./config-store";
 import { createGuideRunner } from "./guide-runner";
 import {
@@ -34,6 +39,7 @@ import {
 import { createTray, trayBounds } from "./tray";
 import { createTui, type TuiStatusInfo } from "./tui";
 import { createWatchdog } from "./watchdog";
+import { createWorkRunner, type WorkRunner } from "./work/runner";
 import {
   createCompanionController,
   createCompanionWindow,
@@ -88,6 +94,9 @@ async function main(): Promise<void> {
   let machine: SessionMachine | null = null;
   let companionCtl: CompanionController | null = null;
   let agentRunner: AgentRunner | null = null;
+  let workRunner: WorkRunner | null = null;
+  let orb: BrowserWindow | null = null;
+  let orbCtl: AgentOrbController | null = null;
   let quitting = false;
 
   const sendTo = (
@@ -96,6 +105,14 @@ async function main(): Promise<void> {
     ...args: unknown[]
   ) => {
     if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
+  };
+
+  // Clic sur le rond des agents : ouvrir le panneau et le placer sur l'onglet
+  // agents (le renderer du panneau est chargé dès le démarrage, même masqué).
+  const openPanelOnAgents = () => {
+    const bounds = trayBounds();
+    if (panel && bounds && !panel.isVisible()) togglePanel(panel, bounds);
+    sendTo(panel, CH.panelFocusAgents);
   };
 
   // ---- Statut agrégé (panneau + onboarding) ----------------------------
@@ -142,7 +159,21 @@ async function main(): Promise<void> {
     companion?.showInactive();
     if (!companionCtl && companion) {
       companionCtl = createCompanionController(companion);
+      // Mode persisté : redémarrer docké si l'utilisateur l'avait garé.
+      if (getConfig().companionMode === "docked") {
+        companionCtl.setDocked(true);
+      }
     }
+  };
+
+  // Dock du compagnon : bascule partagée tray / double-clic sur la fleur,
+  // persistée dans la config (survit aux redémarrages).
+  const setCompanionDocked = (dockedMode: boolean) => {
+    setConfig({ companionMode: dockedMode ? "docked" : "follow" });
+    companionCtl?.setDocked(dockedMode);
+  };
+  const toggleCompanionDock = () => {
+    setCompanionDocked(getConfig().companionMode !== "docked");
   };
 
   // ---- IPC : enregistré AVANT les fenêtres (les renderers appellent
@@ -186,6 +217,30 @@ async function main(): Promise<void> {
   ipcMain.handle(CH.agentCancel, (_e, id: string) => {
     agentRunner?.cancel(id);
   });
+  // Rond des agents : survol (élargir), glisser vertical (repositionner),
+  // clic (ouvrir le panneau). Voir windows/agent-orb.ts.
+  ipcMain.on(CH.agentOrbHoverStart, () => orbCtl?.setExpanded(true));
+  ipcMain.on(CH.agentOrbHoverEnd, () => orbCtl?.setExpanded(false));
+  ipcMain.on(CH.agentOrbDragStart, (_e, y: number) =>
+    orbCtl?.dragStart(Number(y)),
+  );
+  ipcMain.on(CH.agentOrbDragMove, (_e, y: number) =>
+    orbCtl?.dragMove(Number(y)),
+  );
+  ipcMain.on(CH.agentOrbDragEnd, (_e, y: number) => orbCtl?.dragEnd(Number(y)));
+  ipcMain.handle(CH.agentOrbOpen, () => {
+    openPanelOnAgents();
+  });
+  // Compagnon : survol de la fleur → fenêtre interactive (double-clic
+  // possible) ; hors survol, elle redevient traversée par la souris.
+  ipcMain.on(CH.companionHover, (_e, hovering: boolean) => {
+    if (companion && !companion.isDestroyed()) {
+      companion.setIgnoreMouseEvents(!hovering, { forward: true });
+    }
+  });
+  ipcMain.handle(CH.companionToggleDock, () => {
+    toggleCompanionDock();
+  });
   ipcMain.handle(CH.onboardingDone, () => {
     setConfig({ onboarded: true });
     if (onboarding && !onboarding.isDestroyed()) {
@@ -215,6 +270,10 @@ async function main(): Promise<void> {
     void pushStatus();
     ensureStatusLoop();
   });
+  // Rond des agents : masqué au repos, affiché le temps qu'un agent tourne
+  // (piloté par agentRunner.onRunningChange plus bas).
+  orb = await createAgentOrbWindow();
+  orbCtl = createAgentOrbController(orb);
 
   // Exécuteur de guides : purement géométrique, aucun appel IA par étape.
   const guideRunner = createGuideRunner({
@@ -232,11 +291,19 @@ async function main(): Promise<void> {
     clicksAvailable: mouseHookAvailable,
   });
 
+  // Dernier état ambiant d'un run de travail : ré-émis quand la session
+  // vocale retombe au repos pour que la phase « waiting for you to step
+  // away… » (diffusée pendant que la machine est occupée) reste visible.
+  let lastWorkAmbient: StatePayload | null = null;
   machine = createSessionMachine({
     broadcast: (payload) => {
-      broadcastIsland(payload);
-      sendTo(companion, CH.state, payload);
-      tui.state(payload);
+      const p =
+        payload.island === "idle" && workRunner?.active() && lastWorkAmbient
+          ? lastWorkAmbient
+          : payload;
+      broadcastIsland(p);
+      sendTo(companion, CH.state, p);
+      tui.state(p);
     },
     micStart: () => sendTo(island, CH.micStart),
     micStop: () => sendTo(island, CH.micStop),
@@ -280,6 +347,9 @@ async function main(): Promise<void> {
       sendTo(companion, CH.guideStep, payload);
       tui.guideStep(payload.index, payload.total, payload.text);
     },
+    // Sunflower Work : opt-in explicite (tray), pilotage remis au runner.
+    workEnabled: () => getConfig().sunflowerWorkEnabled,
+    workStart: (task) => workRunner?.start(task) ?? false,
   });
 
   // ---- Agents de code en arrière-plan ----------------------------------
@@ -293,9 +363,15 @@ async function main(): Promise<void> {
   };
   agentRunner = createAgentRunner({
     onUpdate: () => {
-      sendTo(panel, CH.agentsChanged, agentRunner?.list() ?? []);
+      const runs = agentRunner?.list() ?? [];
+      sendTo(panel, CH.agentsChanged, runs);
+      // Même charge utile pour le rond : il en tire le titre + l'état courant.
+      orbCtl?.setStatus(runs);
     },
     onRunningChange: (running) => {
+      // Le rond suit l'état de la file, indépendamment d'une session vocale.
+      if (running) orbCtl?.show();
+      else orbCtl?.hide();
       if (agentIdleTimer) {
         clearTimeout(agentIdleTimer);
         agentIdleTimer = null;
@@ -313,11 +389,16 @@ async function main(): Promise<void> {
         broadcastAmbient({ island: "acting", pose: "idle", message: agentNote });
         agentNote = null;
         agentIdleTimer = setTimeout(() => {
-          if (!machine?.busy() && !agentRunner?.running()) {
+          if (
+            !machine?.busy() &&
+            !agentRunner?.running() &&
+            !workRunner?.active()
+          ) {
             broadcastAmbient({ island: "idle", pose: "idle" });
           }
         }, 4000);
-      } else {
+      } else if (!workRunner?.active()) {
+        // Un run de travail encore actif garde la main sur l'affichage.
         broadcastAmbient({ island: "idle", pose: "idle" });
       }
     },
@@ -347,6 +428,53 @@ async function main(): Promise<void> {
     },
   });
 
+  // ---- Sunflower Work : pilotage souris/clavier (opt-in, présence gardée)
+  // Même politesse d'affichage que les agents : l'île/le compagnon ne sont
+  // touchés qu'au repos — une session vocale reprend toujours la main (et,
+  // de toute façon, taper le hotkey est une entrée réelle qui annule le run).
+  let workIdleTimer: NodeJS.Timeout | null = null;
+  workRunner = createWorkRunner({
+    enabled: () => getConfig().sunflowerWorkEnabled,
+    broadcast: (payload) => {
+      // Mémorisé même quand la machine est occupée : sa retombée au repos
+      // ré-émettra ce dernier état (voir machine.broadcast plus haut).
+      lastWorkAmbient = payload;
+      if (machine?.busy()) return;
+      broadcastAmbient(payload);
+    },
+    onLog: (line) => tui.log(line),
+    onFinished: (result) => {
+      lastWorkAmbient = null;
+      const note =
+        result.status === "done"
+          ? `work finished — ${result.message}`
+          : result.status === "aborted"
+            ? `work stopped — ${result.message}`
+            : `work failed — ${result.message}`;
+      if (!machine?.busy()) {
+        broadcastAmbient({ island: "acting", pose: "idle", message: note });
+        if (workIdleTimer) clearTimeout(workIdleTimer);
+        workIdleTimer = setTimeout(() => {
+          if (
+            !machine?.busy() &&
+            !agentRunner?.running() &&
+            !workRunner?.active()
+          ) {
+            broadcastAmbient({ island: "idle", pose: "idle" });
+          }
+        }, 4000);
+      }
+      if (Notification.isSupported()) {
+        const short =
+          result.task.length > 60 ? `${result.task.slice(0, 57)}…` : result.task;
+        new Notification({
+          title: "sunflower work",
+          body: `"${short}" — ${result.message}`,
+        }).show();
+      }
+    },
+  });
+
   // ---- Tray + hotkey ---------------------------------------------------
   createTray({
     onClick: (bounds) => {
@@ -354,10 +482,21 @@ async function main(): Promise<void> {
       ensureStatusLoop();
     },
     onQuit: () => app.quit(),
+    isCompanionDocked: () => getConfig().companionMode === "docked",
+    onToggleCompanionDock: toggleCompanionDock,
+    isWorkEnabled: () => getConfig().sunflowerWorkEnabled,
+    onToggleWork: () => {
+      const next = !getConfig().sunflowerWorkEnabled;
+      setConfig({ sunflowerWorkEnabled: next });
+      // Couper l'interrupteur arrête aussi tout run en cours, sur-le-champ.
+      if (!next) workRunner?.cancel("switched off from the tray.");
+    },
   });
   // Pas de push-to-talk tant que l'accueil n'est pas terminé.
   initHotkey({
     onDown: () => {
+      // Le hotkey est une entrée réelle : un run de travail s'efface devant.
+      workRunner?.cancel("you pressed the hotkey — all yours.");
       if (!onboarding) {
         // Le modèle se charge pendant que l'utilisateur parle.
         warmModel();
@@ -393,7 +532,11 @@ async function main(): Promise<void> {
     if (data.model.reachable && data.model.pulled) warmModel();
     tui.startRepl({
       submit: (q) => (onboarding ? false : (machine?.askText(q) ?? false)),
-      interrupt: () => machine?.interrupt(),
+      interrupt: () => {
+        // Ctrl+C au terminal : la session ET un éventuel run de travail.
+        workRunner?.cancel("interrupted.");
+        machine?.interrupt();
+      },
       quit: () => app.quit(),
       isBusy: () => machine?.busy() ?? false,
     });
@@ -412,8 +555,10 @@ async function main(): Promise<void> {
     quitting = true;
     tui.dispose();
     machine?.interrupt();
+    workRunner?.dispose();
     agentRunner?.dispose();
     companionCtl?.dispose();
+    orbCtl?.dispose();
     islandVisibility?.dispose();
     stopHotkey();
     watchdog.dispose();

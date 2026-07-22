@@ -120,6 +120,9 @@ function selectTab(agents: boolean): void {
 tabHome.addEventListener("click", () => selectTab(false));
 tabAgents.addEventListener("click", () => selectTab(true));
 
+// Le rond des agents demande d'ouvrir directement sur l'onglet agents.
+window.sunflower.onPanelFocusAgents(() => selectTab(true));
+
 document.getElementById("quit")!.addEventListener("click", () => {
   void window.sunflower.quit();
 });

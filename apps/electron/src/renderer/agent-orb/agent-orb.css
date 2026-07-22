@@ -1,0 +1,143 @@
+/* Le rond des agents : disque noir/jaune docké au bord droit, visible le temps
+   qu'un agent de code tourne. La fenêtre (main) s'élargit au survol pour laisser
+   la place à la pastille de statut, déployée ici vers la gauche. */
+html,
+body {
+  height: 100%;
+}
+
+#dock {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  width: 100%;
+  /* Léger retrait du bord droit de l'écran. */
+  padding-right: 10px;
+}
+
+/* ── Disque ──────────────────────────────────────────────────────────── */
+#orb {
+  position: relative;
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1px solid var(--border-on-dark);
+  background: radial-gradient(circle at 50% 32%, #22201d 0%, var(--ink) 72%);
+  box-shadow: var(--shadow-panel-overlay);
+  display: grid;
+  place-items: center;
+  cursor: grab;
+  -webkit-app-region: no-drag;
+}
+#orb:active {
+  cursor: grabbing;
+}
+#orb:focus-visible {
+  outline: none;
+}
+
+#orb-icon {
+  display: inline-flex;
+  transform-origin: 50% 100%;
+}
+#dock.active #orb-icon {
+  animation: sfSway 4s ease-in-out infinite;
+}
+
+/* Anneau qui tourne (arc jaune) — signal d'activité « en train de coder ». */
+#orb::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 62%,
+    var(--yellow) 82%,
+    transparent 100%
+  );
+  -webkit-mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 3px),
+    #000 calc(100% - 3px)
+  );
+  mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 3px),
+    #000 calc(100% - 3px)
+  );
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+#dock.active #orb::before {
+  opacity: 0.9;
+  animation: sfOrbSpin 2.2s linear infinite;
+}
+
+/* Pulsation douce de l'auréole jaune tant qu'un agent travaille. */
+#dock.active #orb {
+  animation: sfOrbPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes sfOrbSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes sfOrbPulse {
+  0%,
+  100% {
+    box-shadow:
+      var(--shadow-panel-overlay),
+      0 0 0 0 rgba(252, 210, 50, 0.35);
+  }
+  50% {
+    box-shadow:
+      var(--shadow-panel-overlay),
+      0 0 0 7px rgba(252, 210, 50, 0);
+  }
+}
+
+/* ── Pastille de statut (déployée au survol, à gauche du disque) ──────── */
+#pill {
+  position: absolute;
+  right: 74px;
+  top: 50%;
+  max-width: 236px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  background: var(--ink);
+  border: 1px solid var(--border-on-dark);
+  border-radius: 12px;
+  box-shadow: var(--shadow-panel-overlay);
+  opacity: 0;
+  transform: translateY(-50%) translateX(10px);
+  transition:
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+  pointer-events: none;
+}
+#dock.expanded #pill {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+
+#pill-title {
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--cream);
+  max-width: 236px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#pill-state {
+  font-size: 11px;
+  color: var(--yellow);
+  white-space: nowrap;
+}

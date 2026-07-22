@@ -31,7 +31,8 @@ export async function createPanelWindow(): Promise<BrowserWindow> {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      backgroundThrottling: false,
+      // Throttling laissé actif (défaut) : le panneau est masqué l'essentiel
+      // du temps, inutile de garder ses timers à pleine cadence en fond.
     },
   });
   win.setAlwaysOnTop(true, "pop-up-menu");

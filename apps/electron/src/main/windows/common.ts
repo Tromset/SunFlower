@@ -17,6 +17,14 @@ export function createOverlayWindow(opts: {
   width: number;
   height: number;
   show?: boolean;
+  /** Rare : superposition qui doit recevoir focus/souris (le rond des agents,
+   *  seul élément interactif — les autres restent traversés par la souris). */
+  focusable?: boolean;
+  /** Par défaut le throttling reste coupé (île, compagnon, rond des agents :
+   *  animations visibles en continu). Le passer à true pour les superpositions
+   *  souvent masquées (pointer) : Chromium ralentit alors leurs timers quand
+   *  elles sont cachées au lieu de brûler du CPU en fond. */
+  backgroundThrottling?: boolean;
 }): BrowserWindow {
   const win = new BrowserWindow({
     width: opts.width,
@@ -26,7 +34,7 @@ export function createOverlayWindow(opts: {
     frame: false,
     resizable: false,
     movable: false,
-    focusable: false,
+    focusable: opts.focusable ?? false,
     skipTaskbar: true,
     hasShadow: false,
     roundedCorners: false,
@@ -35,7 +43,7 @@ export function createOverlayWindow(opts: {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      backgroundThrottling: false,
+      backgroundThrottling: opts.backgroundThrottling ?? false,
     },
   });
   win.setAlwaysOnTop(true, "screen-saver");
