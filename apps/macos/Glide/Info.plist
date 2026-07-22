@@ -21,6 +21,8 @@
 	<string>$(CLERK_PUBLISHABLE_KEY)</string>
 	<key>ClerkRedirectURL</key>
 	<string>$(CLERK_REDIRECT_URL)</string>
+	<key>POSTHOG_API_KEY</key>
+	<string>$(POSTHOG_API_KEY)</string>
 	<key>GlideServerBaseURL</key>
 	<string>$(GLIDE_SERVER_BASE_URL)</string>
 	<key>SUFeedURL</key>
