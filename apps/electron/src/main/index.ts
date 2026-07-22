@@ -174,6 +174,9 @@ async function main(): Promise<void> {
   const setCompanionDocked = (dockedMode: boolean) => {
     setConfig({ companionMode: dockedMode ? "docked" : "follow" });
     companionCtl?.setDocked(dockedMode);
+    // Le panneau expose la même bascule (roam ↔ dock) : la garder synchro
+    // quel que soit le point d'entrée (tray, double-clic sur la fleur, panneau).
+    sendTo(panel, CH.companionDocked, dockedMode);
   };
   const toggleCompanionDock = () => {
     setCompanionDocked(getConfig().companionMode !== "docked");
