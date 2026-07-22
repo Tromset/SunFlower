@@ -5,7 +5,8 @@
   "description": "100% local screen companion — the sunflower that watches your screen and answers out loud",
   "main": "dist/main/index.cjs",
   "bin": {
-    "sunflower": "bin/sunflower.js"
+    "sunflower": "bin/sunflower.js",
+    "sunflower-models": "bin/sunflower-models.js"
   },
   "scripts": {
     "start": "node scripts/build.mjs && electron .",

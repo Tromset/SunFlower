@@ -5,6 +5,17 @@ const { spawn, spawnSync } = require("node:child_process");
 const { existsSync } = require("node:fs");
 const path = require("node:path");
 
+// `sunflower models [...]` : sous-commande autonome, zéro build/Electron requis.
+if (process.argv[2] === "models") {
+  const child = spawn(
+    process.execPath,
+    [path.join(__dirname, "sunflower-models.js"), ...process.argv.slice(3)],
+    { stdio: "inherit" },
+  );
+  child.on("exit", (code) => process.exit(code ?? 0));
+  return;
+}
+
 const appRoot = path.resolve(__dirname, "..");
 
 let electronBin;

@@ -65,6 +65,26 @@ const POSE_ART: Record<CompanionPose, PixelArt> = {
     état la classe disparaît, l'animation CSS s'arrête et aucun timer ne fuit. */
 const ACTIVITY_CLASSES = ["coding", "reading", "working"] as const;
 
+/* Après 60 s de pose « idle », les animations décoratives infinies (balancement,
+   curseur) sont mises en pause via body.anim-paused — gating ajouté suite à un
+   rapport utilisateur « l'app fait chauffer mon ordinateur ». Tout changement
+   d'état le lève aussitôt. */
+const ANIM_PAUSE_AFTER_MS = 60_000;
+let animPauseTimer: number | null = null;
+
+function armAnimPause(pose: CompanionPose): void {
+  if (animPauseTimer !== null) {
+    window.clearTimeout(animPauseTimer);
+    animPauseTimer = null;
+  }
+  document.body.classList.remove("anim-paused");
+  if (pose === "idle") {
+    animPauseTimer = window.setTimeout(() => {
+      document.body.classList.add("anim-paused");
+    }, ANIM_PAUSE_AFTER_MS);
+  }
+}
+
 function renderPose(pose: CompanionPose): void {
   const art: PixelArt = POSE_ART[pose];
   const [vw, vh] = art.vb;
@@ -80,6 +100,7 @@ function renderPose(pose: CompanionPose): void {
   for (const cls of ACTIVITY_CLASSES) {
     flower.classList.toggle(cls, pose === cls);
   }
+  armAnimPause(pose);
 }
 
 window.sunflower.onState((payload: StatePayload) => {
@@ -129,6 +150,37 @@ window.sunflower.onGuideStep(({ index, total, text, cut }) => {
 
 window.sunflower.onFlip((side) => {
   document.body.classList.toggle("flip", side === "left");
+});
+
+// ── Dock : badge compact en bas à droite (voir main/windows/companion.ts) ──
+window.sunflower.onCompanionDocked((docked) => {
+  document.body.classList.toggle("docked", docked);
+});
+
+/* La fenêtre est traversée par la souris avec forward: true : les mousemove
+   arrivent quand même ici. Au survol de la fleur, on demande au main de rendre
+   la fenêtre interactive (le double-clic devient possible) ; on la relâche dès
+   que le pointeur en sort pour ne jamais bloquer les clics du bureau. */
+let overFlower = false;
+const setHover = (next: boolean): void => {
+  if (next === overFlower) return;
+  overFlower = next;
+  window.sunflower.companionSetHover(next);
+};
+document.addEventListener("mousemove", (e) => {
+  const r = flower.getBoundingClientRect();
+  setHover(
+    e.clientX >= r.left &&
+      e.clientX <= r.right &&
+      e.clientY >= r.top &&
+      e.clientY <= r.bottom,
+  );
+});
+document.addEventListener("mouseleave", () => setHover(false));
+
+// Double-clic sur la fleur : bascule follow ↔ docked (persisté en config).
+flower.addEventListener("dblclick", () => {
+  void window.sunflower.companionToggleDock();
 });
 
 initTts(() => window.sunflower.sendTtsEnded());

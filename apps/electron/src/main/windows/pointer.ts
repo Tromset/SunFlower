@@ -9,7 +9,12 @@ export const POINTER_MS = 4000;
 let hideTimer: NodeJS.Timeout | null = null;
 
 export async function createPointerWindow(): Promise<BrowserWindow> {
-  const win = createOverlayWindow({ width: POINTER_W, height: POINTER_H });
+  // Masqué la plupart du temps : laisser Chromium throttler ses timers en fond.
+  const win = createOverlayWindow({
+    width: POINTER_W,
+    height: POINTER_H,
+    backgroundThrottling: true,
+  });
   await win.loadFile(rendererFile("pointer/pointer.html"));
   return win;
 }

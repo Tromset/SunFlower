@@ -528,11 +528,11 @@ struct CompanionPanelView: View {
                     .frame(width: 16)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Share anonymous usage data")
+                    Text("Share usage data, including message content")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(DS.Colors.textSecondary)
 
-                    Text("Off by default. Nothing is sent unless you enable this.")
+                    Text("Off by default. When on, your messages and the AI's responses are sent to the developer.")
                         .font(.system(size: 10))
                         .foregroundColor(DS.Colors.textTertiary)
                 }

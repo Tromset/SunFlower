@@ -42,6 +42,7 @@ const bridge: SunflowerBridge = {
   quit: () => ipcRenderer.invoke(CH.appQuit),
   onAgentsChanged: (cb) =>
     on(CH.agentsChanged, cb as (...a: unknown[]) => void),
+  onPanelFocusAgents: (cb) => on(CH.panelFocusAgents, cb),
   agentsList: () => ipcRenderer.invoke(CH.agentsList),
   agentStart: (task: string, workdir: string) =>
     ipcRenderer.invoke(CH.agentStart, task, workdir),
@@ -49,6 +50,24 @@ const bridge: SunflowerBridge = {
   agentDecide: (id: string, path: string, decision: AgentDecision) =>
     ipcRenderer.invoke(CH.agentDecide, id, path, decision),
   agentCancel: (id: string) => ipcRenderer.invoke(CH.agentCancel, id),
+  // Petit rond des agents (voir main/windows/agent-orb.ts).
+  onAgentOrbReset: (cb: () => void) =>
+    on(CH.agentOrbReset, cb as (...a: unknown[]) => void),
+  agentOrbHoverStart: () => ipcRenderer.send(CH.agentOrbHoverStart),
+  agentOrbHoverEnd: () => ipcRenderer.send(CH.agentOrbHoverEnd),
+  agentOrbDragStart: (screenY: number) =>
+    ipcRenderer.send(CH.agentOrbDragStart, screenY),
+  agentOrbDragMove: (screenY: number) =>
+    ipcRenderer.send(CH.agentOrbDragMove, screenY),
+  agentOrbDragEnd: (screenY: number) =>
+    ipcRenderer.send(CH.agentOrbDragEnd, screenY),
+  agentOrbOpen: () => ipcRenderer.invoke(CH.agentOrbOpen),
+  // Compagnon dockable (voir main/windows/companion.ts).
+  onCompanionDocked: (cb) =>
+    on(CH.companionDocked, cb as (...a: unknown[]) => void),
+  companionSetHover: (hovering: boolean) =>
+    ipcRenderer.send(CH.companionHover, hovering),
+  companionToggleDock: () => ipcRenderer.invoke(CH.companionToggleDock),
 };
 
 contextBridge.exposeInMainWorld("sunflower", bridge);

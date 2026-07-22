@@ -21,6 +21,12 @@ function buildTrayImage(): Electron.NativeImage {
 export function createTray(opts: {
   onClick: (trayBounds: Electron.Rectangle) => void;
   onQuit: () => void;
+  /** Compagnon docké ? (lu à l'ouverture du menu : libellé à jour). */
+  isCompanionDocked: () => boolean;
+  onToggleCompanionDock: () => void;
+  /** Sunflower Work autorisé ? (lu à l'ouverture du menu : coche à jour). */
+  isWorkEnabled: () => boolean;
+  onToggleWork: () => void;
 }): Tray {
   tray = new Tray(buildTrayImage());
   nativeTheme.on("updated", () => {
@@ -33,6 +39,20 @@ export function createTray(opts: {
   tray.on("right-click", () => {
     tray!.popUpContextMenu(
       Menu.buildFromTemplate([
+        {
+          label: opts.isCompanionDocked()
+            ? "let sunflower roam"
+            : "dock sunflower to corner",
+          click: opts.onToggleCompanionDock,
+        },
+        { type: "separator" },
+        {
+          label: "Enable Sunflower Work (experimental)",
+          type: "checkbox",
+          checked: opts.isWorkEnabled(),
+          click: opts.onToggleWork,
+        },
+        { type: "separator" },
         { label: "quit sunflower", click: opts.onQuit },
       ]),
     );

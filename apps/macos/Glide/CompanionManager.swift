@@ -1,6 +1,5 @@
 import Combine
 import Foundation
-import PostHog
 import ScreenCaptureKit
 import SwiftUI
 
@@ -191,20 +190,16 @@ final class CompanionManager: ObservableObject {
         hasSubmittedEmail = true
         UserDefaults.standard.set(true, forKey: "hasSubmittedEmail")
 
-        // Analytics identify is gated behind the telemetry opt-in like every
-        // other PostHog call site — off by default, never sent unless the
-        // user explicitly enabled it.
+        // We deliberately do NOT identify the user by their raw email. Even
+        // with telemetry opted in, calling identify() with the address would
+        // ship PII to PostHog. Events stay attributed to PostHog's
+        // auto-generated anonymous distinct id instead, so opting in never
+        // reveals who you are.
         //
-        // This used to also POST the raw email address to the upstream
-        // author's personal form endpoint (submit-form.com/RWbGJxmIs). That
-        // sent PII to a third party outside our control and has been removed
-        // entirely — it is not gated behind analyticsOptIn because it should
-        // never have existed, opt-in or not.
-        if GlideAnalytics.isEnabled {
-            PostHogSDK.shared.identify(trimmedEmail, userProperties: [
-                "email": trimmedEmail
-            ])
-        }
+        // A previous version additionally POSTed this email to the upstream
+        // author's personal third-party form endpoint, sending PII to a party
+        // outside our control. That has been removed entirely — it was never
+        // gated behind the opt-in because it should never have existed.
     }
 
     func start() {

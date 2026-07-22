@@ -1,7 +1,9 @@
-// Extraction en flux des marqueurs [POINT:x%,y%], [STEP:…] et [DONE] : le
-// texte affiché/prononcé ne contient jamais de marqueur, même coupé entre
-// deux chunks. Avant tout STEP, comportement historique (intro streamée +
-// POINT unique) ; dès le premier STEP, le texte alimente le plan du guide.
+// Extraction en flux des marqueurs [POINT:x%,y%], [STEP:…], [DONE] et
+// [WORK:…] : le texte affiché/prononcé ne contient jamais de marqueur, même
+// coupé entre deux chunks. Avant tout STEP, comportement historique (intro
+// streamée + POINT unique) ; dès le premier STEP, le texte alimente le plan
+// du guide. [WORK: tâche] signale une corvée que Sunflower Work peut piloter
+// (voir work/runner.ts) — capturé une seule fois, jamais affiché.
 export interface PointEvent {
   xPct: number;
   yPct: number;
@@ -26,8 +28,9 @@ const POINT =
 const STEP =
   /\[STEP(?::\s*(\d+(?:\.\d+)?)\s*%?\s*,\s*(\d+(?:\.\d+)?)\s*%?)?(?:\s*:\s*(click))?\s*\]/i;
 const DONE = /\[DONE\]/i;
+const WORK = /\[WORK:\s*([^\]\n]+?)\s*\]/i;
 /** Amorces possibles d'un marqueur coupé en fin de chunk (comparées en MAJ). */
-const STARTS = ["[POINT:", "[STEP", "[DONE]"];
+const STARTS = ["[POINT:", "[STEP", "[DONE]", "[WORK:"];
 
 /** Étapes max d'un guide — le prompt en demande 6, on tolère un peu plus. */
 const MAX_STEPS = 8;
@@ -50,11 +53,16 @@ function cleanInstruction(raw: string): string {
   return text;
 }
 
+/** Longueur max d'une tâche Sunflower Work (défensif). */
+const MAX_WORK_CHARS = 200;
+
 export interface AnswerParser {
   push(chunk: string): void;
   flush(): void;
   /** Plan du guide — null avant flush() ou sans étape valide. */
   guide(): ParsedGuide | null;
+  /** Tâche Sunflower Work — null avant flush() ou sans marqueur [WORK:…]. */
+  work(): string | null;
 }
 
 export function createAnswerParser(handlers: {
@@ -68,6 +76,8 @@ export function createAnswerParser(handlers: {
   const steps: GuideStep[] = [];
   let stepText = "";
   let outro = "";
+  /** Tâche [WORK:…] capturée (première occurrence seulement). */
+  let workTask: string | null = null;
   /** Texte brut du plan (marqueurs inclus) pour la dégradation en réponse. */
   let planRaw = "";
 
@@ -97,7 +107,8 @@ export function createAnswerParser(handlers: {
       const point = POINT.exec(buffer);
       const step = STEP.exec(buffer);
       const done = DONE.exec(buffer);
-      const matches = [point, step, done].filter(
+      const work = WORK.exec(buffer);
+      const matches = [point, step, done, work].filter(
         (m): m is RegExpExecArray => m !== null,
       );
       if (matches.length === 0) break;
@@ -129,6 +140,12 @@ export function createAnswerParser(handlers: {
           next.yPct = clampPct(first[2] as string);
         }
         steps.push(next);
+      } else if (first === work) {
+        // [WORK: tâche] : capturé une seule fois, jamais affiché ni prononcé.
+        if (workTask === null) {
+          const task = (first[1] ?? "").trim();
+          if (task) workTask = task.slice(0, MAX_WORK_CHARS);
+        }
       } else if (mode === "steps") {
         closeStep();
         planRaw += first[0];
@@ -180,6 +197,9 @@ export function createAnswerParser(handlers: {
       if (trimmedOutro) result.outro = trimmedOutro;
       return result;
     },
+    work() {
+      return flushed ? workTask : null;
+    },
   };
 }
 
@@ -189,5 +209,6 @@ export function stripMarkers(text: string): string {
     .replace(new RegExp(POINT.source, "gi"), "")
     .replace(new RegExp(STEP.source, "gi"), "")
     .replace(new RegExp(DONE.source, "gi"), "")
+    .replace(new RegExp(WORK.source, "gi"), "")
     .trim();
 }

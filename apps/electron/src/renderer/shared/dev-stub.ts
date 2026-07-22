@@ -67,6 +67,9 @@ export function ensureBridge(): void {
         ollamaModel: "qwen3-vl:8b",
         whisperModel: "ggml-small-q5_1.bin",
         screenCaptureConfirmed: true,
+        agentOrbY: 0.5,
+        companionMode: "follow" as const,
+        sunflowerWorkEnabled: false,
       }),
     setConfig: (patch) =>
       Promise.resolve({
@@ -75,12 +78,23 @@ export function ensureBridge(): void {
         ollamaModel: "qwen3-vl:8b",
         whisperModel: "ggml-small-q5_1.bin",
         screenCaptureConfirmed: true,
+        agentOrbY: 0.5,
+        companionMode: "follow" as const,
+        sunflowerWorkEnabled: false,
         ...patch,
       }),
     downloadWhisper: () => Promise.resolve(),
     onboardingDone: () => Promise.resolve(),
     quit: () => Promise.resolve(),
     onAgentsChanged: sub("agentsChanged"),
+    onPanelFocusAgents: sub("panelFocusAgents"),
+    onAgentOrbReset: sub("agentOrbReset"),
+    agentOrbHoverStart: () => {},
+    agentOrbHoverEnd: () => {},
+    agentOrbDragStart: () => {},
+    agentOrbDragMove: () => {},
+    agentOrbDragEnd: () => {},
+    agentOrbOpen: () => Promise.resolve(),
     agentsList: () => Promise.resolve([]),
     agentStart: (task: string, workdir: string) =>
       Promise.resolve({
@@ -95,6 +109,9 @@ export function ensureBridge(): void {
     agentGet: () => Promise.resolve(null),
     agentDecide: () => Promise.resolve(null),
     agentCancel: () => Promise.resolve(),
+    onCompanionDocked: sub("companionDocked"),
+    companionSetHover: () => {},
+    companionToggleDock: () => Promise.resolve(),
   };
   window.sunflower = stub;
 }

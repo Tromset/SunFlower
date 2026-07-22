@@ -78,22 +78,84 @@ body {
   animation-delay: 0.6s;
 }
 
-#dots {
+/* ── Abeilles « thinking » ─────────────────────────────────────────────
+   Mêmes bestioles que le companion (voir companion.css) : les anciens points
+   de réflexion deviennent 2 minuscules abeilles pixel qui tournent juste à
+   côté du label. Palette réutilisée depuis shared/sunflower-pixels.ts (BEE) :
+   var(--ink) = noir des rayures, var(--yellow) = jaune, var(--orange-tint) =
+   crème des ailes. L'île étant petite, tout reste minuscule (~6×4.5px) et
+   discret ; display:none hors .state-thinking, donc aucune animation ne
+   tourne en dehors de cet état (voir aussi le reset prefers-reduced-motion
+   de base.css). */
+#bees {
   display: none;
-  gap: 4px;
+  position: relative;
+  width: 6px;
+  height: 10px;
+  margin-left: -4px;
 }
-#dots span {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: rgba(252, 210, 50, 0.12);
-  animation: sfDots 1.4s ease-in-out infinite;
+.bee {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  animation: sfIslandBeeOrbit var(--bee-dur, 2.6s) linear infinite;
 }
-#dots span:nth-child(2) {
-  animation-delay: 0.2s;
+.bee-1 {
+  --bee-dur: 2.6s;
 }
-#dots span:nth-child(3) {
-  animation-delay: 0.4s;
+.bee-2 {
+  --bee-dur: 3.1s;
+  animation-delay: -1.4s;
+  animation-direction: reverse;
+}
+.bee-sprite {
+  position: relative;
+  display: block;
+  width: 1.5px;
+  height: 1.5px;
+  animation: sfIslandBeeBob 1s ease-in-out infinite;
+  box-shadow:
+    /* ailes */
+    1.5px 0 0 0 var(--orange-tint),
+    3px 0 0 0 var(--orange-tint),
+    /* corps : rayures jaune / noir, 2 lignes */
+    0 1.5px 0 0 var(--ink),
+    1.5px 1.5px 0 0 var(--yellow),
+    3px 1.5px 0 0 var(--ink),
+    4.5px 1.5px 0 0 var(--yellow),
+    0 3px 0 0 var(--ink),
+    1.5px 3px 0 0 var(--yellow),
+    3px 3px 0 0 var(--ink),
+    4.5px 3px 0 0 var(--yellow);
+}
+.bee-2 .bee-sprite {
+  animation-duration: 0.85s;
+}
+@keyframes sfIslandBeeOrbit {
+  0% {
+    transform: translate(4px, 0);
+  }
+  25% {
+    transform: translate(0, -3px);
+  }
+  50% {
+    transform: translate(-4px, 0);
+  }
+  75% {
+    transform: translate(0, 3px);
+  }
+  100% {
+    transform: translate(4px, 0);
+  }
+}
+@keyframes sfIslandBeeBob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1px);
+  }
 }
 
 #badge {
@@ -122,8 +184,8 @@ body {
 .state-answering #wave {
   display: inline-flex;
 }
-.state-thinking #dots {
-  display: inline-flex;
+.state-thinking #bees {
+  display: inline-block;
 }
 .state-error #badge {
   display: none;

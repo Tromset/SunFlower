@@ -11,8 +11,19 @@ enum GlideAnalytics {
     // reporting even if PostHog was already set up.
     private static let optInDefaultsKey = "analyticsOptIn"
 
+    // The PostHog project API key is injected at build time from the
+    // gitignored Config.xcconfig into Info.plist (POSTHOG_API_KEY =
+    // $(POSTHOG_API_KEY)) and read here via AppBundleConfiguration, which
+    // normalises an empty value or the unresolved "$(POSTHOG_API_KEY)"
+    // placeholder to nil. When the key is absent, analytics is a hard no-op:
+    // isEnabled is false regardless of the user's choice, so PostHog is never
+    // initialised and no event is ever captured even if the user opts in.
+    private static var resolvedAPIKey: String? {
+        AppBundleConfiguration.stringValue(forKey: "POSTHOG_API_KEY")
+    }
+
     static var isEnabled: Bool {
-        UserDefaults.standard.bool(forKey: optInDefaultsKey)
+        resolvedAPIKey != nil && UserDefaults.standard.bool(forKey: optInDefaultsKey)
     }
 
     private static var isConfigured = false
@@ -35,12 +46,14 @@ enum GlideAnalytics {
     }
 
     private static func setUpPostHogIfNeeded() {
+        // No key, no analytics — never initialise PostHog with a placeholder.
+        guard let apiKey = resolvedAPIKey else { return }
         guard !isConfigured else {
             PostHogSDK.shared.optIn()
             return
         }
         let config = PostHogConfig(
-            apiKey: "phc_xcQPygmhTMzzYh8wNW92CCwoXmnzqyChAixh8zgpqC3C",
+            apiKey: apiKey,
             host: "https://us.i.posthog.com"
         )
         PostHogSDK.shared.setup(config)

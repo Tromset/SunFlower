@@ -293,3 +293,52 @@ body.flip #row {
     opacity: 0;
   }
 }
+
+/* ── Pause d'inactivité ────────────────────────────────────────────────
+   Après 60 s de pose idle (voir companion.ts), les animations décoratives
+   infinies sont figées : zéro travail de compositing quand personne ne
+   regarde. Tout changement d'état retire la classe et tout repart. */
+body.anim-paused #flower-svg.sway,
+body.anim-paused #caret,
+body.anim-paused .bee,
+body.anim-paused .bee-sprite {
+  animation-play-state: paused;
+}
+
+/* ── Mode docké ────────────────────────────────────────────────────────
+   La fenêtre devient un badge ~110×110 garé en bas à droite (voir
+   main/windows/companion.ts) : fleur réduite en bas à droite, bulle compacte
+   au-dessus — rien ne flotte au milieu de l'écran. Déclaré après body.flip
+   #row pour l'emporter à spécificité égale. */
+body.docked #row {
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 4px;
+}
+body.docked #flower {
+  transform: scale(0.75);
+  transform-origin: 100% 100%;
+}
+body.docked #bubble {
+  max-width: 102px;
+  /* Assez haut pour quelques lignes, et défilable au-delà : une étape de
+   * guide ou une réponse longue reste lisible même dockée. */
+  max-height: 64px;
+  overflow-y: auto;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+body.docked #step-badge {
+  font-size: 9px;
+  margin-bottom: 2px;
+}
+body.docked #bubble-text {
+  font-size: 10px;
+  line-height: 1.4;
+}
+body.docked #caret {
+  width: 5px;
+  height: 9px;
+  margin-left: 3px;
+}

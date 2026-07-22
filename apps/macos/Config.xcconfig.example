@@ -31,6 +31,14 @@ CLERK_PUBLISHABLE_KEY = pk_test_YOUR_CLERK_PUBLISHABLE_KEY_HERE
 // account settings. A free personal team works for local development.
 DEVELOPMENT_TEAM = YOUR_TEAM_ID_HERE
 
+// Optional. Your PostHog project API key, used only for opt-in, off-by-default
+// telemetry. Injected into Glide/Info.plist as POSTHOG_API_KEY and read by
+// GlideAnalytics via AppBundleConfiguration. Leave this empty (as below) and
+// analytics is a hard no-op: PostHog is never initialised and no event is ever
+// sent, even if the user flips the "Share usage data" toggle on. Fill it in
+// only if you want to collect your own analytics into your own PostHog project.
+POSTHOG_API_KEY =
+
 // Optional. Overrides the Worker base URL the app talks to. Only needed if
 // you are not running the Worker at the default http://localhost:8787
 // (e.g. pnpm run dev:server on a different port, or a deployed Worker).

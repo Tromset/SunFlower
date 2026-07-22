@@ -228,6 +228,22 @@ export function createAgentRunner(deps: AgentRunnerDeps): AgentRunner {
   let wasRunning = false;
   let counter = 0;
 
+  /** Historique borné : chaque run garde transcript + proposition complets,
+   *  la mémoire grimperait sans limite sur une longue session. */
+  const MAX_RUNS = 20;
+  const trimHistory = () => {
+    // runs est trié du plus récent au plus ancien (unshift) : on évince par
+    // la fin, et UNIQUEMENT les runs terminés. Un run « awaiting-review »
+    // porte une proposition jamais appliquée — l'évincer la perdrait sans
+    // bruit ; mieux vaut un historique qui déborde qu'un travail effacé.
+    for (let i = runs.length - 1; runs.length > MAX_RUNS && i >= 0; i--) {
+      const r = runs[i];
+      if (r && (r.status === "done" || r.status === "failed")) {
+        runs.splice(i, 1);
+      }
+    }
+  };
+
   const summary = (r: AgentRun): AgentRunSummary => ({
     id: r.id,
     task: r.task,
@@ -359,6 +375,7 @@ export function createAgentRunner(deps: AgentRunnerDeps): AgentRunner {
         run.finishedAt = Date.now();
       }
       runs.unshift(run);
+      trimHistory();
       deps.onUpdate(run);
       pump();
       return summary(run);

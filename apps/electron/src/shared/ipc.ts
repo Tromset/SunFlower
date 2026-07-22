@@ -27,10 +27,18 @@ export const CH = {
   agentsChanged: "sf:agents-changed",
   // Le rond des agents demande au panneau de s'ouvrir sur l'onglet agents.
   panelFocusAgents: "sf:panel-focus-agents",
+  // Le compagnon passe en badge docké (ou en sort) : le renderer compacte
+  // sa mise en page (voir renderer/companion + windows/companion.ts).
+  companionDocked: "sf:companion:docked",
   // renderer → main (send)
   micData: "sf:mic-data",
   micError: "sf:mic-error",
   ttsEnded: "sf:tts-ended",
+  // Survol de la fleur : la fenêtre du compagnon (sinon traversée par la
+  // souris) devient interactive le temps du survol, pour le double-clic.
+  companionHover: "sf:companion:hover",
+  // main → rond des agents : replie pastille/glisser (fenêtre re-affichée).
+  agentOrbReset: "sf:agent-orb:reset",
   // Glisser vertical du rond des agents (voir windows/agent-orb.ts).
   agentOrbHoverStart: "sf:agent-orb:hover-start",
   agentOrbHoverEnd: "sf:agent-orb:hover-end",
@@ -52,6 +60,8 @@ export const CH = {
   agentDecide: "sf:agents:decide",
   agentCancel: "sf:agents:cancel",
   agentOrbOpen: "sf:agent-orb:open",
+  // Double-clic sur la fleur : bascule follow ↔ docked (persisté en config).
+  companionToggleDock: "sf:companion:toggle-dock",
 } as const;
 
 export interface MicDataPayload {
@@ -87,6 +97,8 @@ export interface SunflowerBridge {
   onFlip(cb: (side: "left" | "right") => void): Unsubscribe;
   onAgentsChanged(cb: (runs: AgentRunSummary[]) => void): Unsubscribe;
   onPanelFocusAgents(cb: () => void): Unsubscribe;
+  /** Le compagnon vient d'être docké (true) ou libéré (false). */
+  onCompanionDocked(cb: (docked: boolean) => void): Unsubscribe;
   sendMicData(pcm: Float32Array, sampleRate: number): void;
   sendMicError(code: MicErrorCode): void;
   sendTtsEnded(): void;
@@ -110,6 +122,8 @@ export interface SunflowerBridge {
   agentCancel(id: string): Promise<void>;
   // Petit rond des agents en arrière-plan (docké au bord droit de l'écran,
   // visible uniquement le temps qu'un agent tourne — voir windows/agent-orb.ts).
+  /** Fenêtre du rond ré-affichée repliée : resynchroniser l'état visuel. */
+  onAgentOrbReset(cb: () => void): void;
   agentOrbHoverStart(): void;
   agentOrbHoverEnd(): void;
   agentOrbDragStart(screenY: number): void;
@@ -117,6 +131,10 @@ export interface SunflowerBridge {
   agentOrbDragEnd(screenY: number): void;
   /** Clic (sans glisser) : ouvre le panneau sur l'onglet agents. */
   agentOrbOpen(): Promise<void>;
+  /** Survol de la fleur (companion) : rend la fenêtre interactive ou non. */
+  companionSetHover(hovering: boolean): void;
+  /** Double-clic sur la fleur : bascule follow ↔ docked. */
+  companionToggleDock(): Promise<void>;
 }
 
 declare global {
