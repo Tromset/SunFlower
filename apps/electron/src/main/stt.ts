@@ -77,6 +77,14 @@ function modelUrl(): string {
 
 function loadModule(): boolean {
   if (mod) return true;
+  // Le binding natif installe un whisper_log_set muet quand NODE_ENV vaut
+  // "production" au moment du require — sinon chaque transcription imprime
+  // toute son init (modèle, état, timings) sur le stderr du terminal. On le
+  // force le temps du chargement puis on restaure, pour ne pas changer
+  // l'environnement du reste du process. SUNFLOWER_DEBUG=1 garde tout.
+  const prevNodeEnv = process.env["NODE_ENV"];
+  const quiet = process.env["SUNFLOWER_DEBUG"] !== "1";
+  if (quiet) process.env["NODE_ENV"] = "production";
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     mod = require("smart-whisper") as SmartWhisperModule;
@@ -88,6 +96,11 @@ function loadModule(): boolean {
       "native whisper module unavailable — reinstall with pnpm install.",
     );
     return false;
+  } finally {
+    if (quiet) {
+      if (prevNodeEnv === undefined) delete process.env["NODE_ENV"];
+      else process.env["NODE_ENV"] = prevNodeEnv;
+    }
   }
 }
 

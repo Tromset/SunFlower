@@ -182,7 +182,11 @@ export function createWatchdog(): WatchdogHandle {
   // le chemin chaud récurrent.
   void mkdir(dir, { recursive: true })
     .then(() => {
-      console.log(`[sunflower] watchdog: logging resource samples to ${dir}`);
+      // Ligne d'info réservée au debug : au lancement normal, le terminal
+      // ne montre que la bannière et le dialogue.
+      if (process.env["SUNFLOWER_DEBUG"] === "1") {
+        console.log(`[sunflower] watchdog: logging resource samples to ${dir}`);
+      }
       if (disposed) return;
       timer = setInterval(tick, SAMPLE_INTERVAL_MS);
       timer.unref();

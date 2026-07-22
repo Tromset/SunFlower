@@ -9,7 +9,7 @@
     "sunflower-models": "bin/sunflower-models.js"
   },
   "scripts": {
-    "start": "node scripts/build.mjs && electron .",
+    "start": "node scripts/build.mjs && node bin/sunflower.js",
     "dev": "node scripts/build.mjs --watch",
     "build": "node scripts/build.mjs",
     "check-types": "tsc --noEmit"

@@ -1,7 +1,6 @@
 // Bundles main / preload / renderers with esbuild and copies static assets.
 // Usage: node scripts/build.mjs [--watch]
 import { build, context } from "esbuild";
-import { spawn } from "node:child_process";
 import {
   cpSync,
   mkdirSync,
@@ -14,6 +13,7 @@ import {
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnQuiet } from "./native-log-filter.cjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const watch = process.argv.includes("--watch");
@@ -98,7 +98,9 @@ if (!watch) {
   let killing = false;
   const spawnApp = () => {
     const electron = createRequire(path.join(root, "package.json"))("electron");
-    child = spawn(electron, [root], { stdio: "inherit" });
+    // stderr filtré : le bruit natif whisper.cpp/ggml part dans un fichier
+    // de log au lieu de recouvrir le terminal (SUNFLOWER_DEBUG=1 = brut).
+    child = spawnQuiet(electron, [root]);
   };
   // Attendre l'exit de l'ancienne instance : le verrou single-instance de
   // l'app n'est libéré qu'à sa sortie effective (teardown whisper compris).

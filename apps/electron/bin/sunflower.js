@@ -17,6 +17,11 @@ if (process.argv[2] === "models") {
 }
 
 const appRoot = path.resolve(__dirname, "..");
+// stderr filtré : le bruit natif whisper.cpp/ggml part dans un fichier de
+// log, le terminal ne garde que le dialogue (SUNFLOWER_DEBUG=1 = tout brut).
+const { spawnQuiet } = require(
+  path.join(appRoot, "scripts", "native-log-filter.cjs"),
+);
 
 let electronBin;
 try {
@@ -39,7 +44,6 @@ if (!existsSync(path.join(appRoot, "dist", ".build-ok"))) {
   if (build.status !== 0) process.exit(build.status ?? 1);
 }
 
-const child = spawn(electronBin, [appRoot, ...process.argv.slice(2)], {
-  stdio: "inherit",
+spawnQuiet(electronBin, [appRoot, ...process.argv.slice(2)], {
+  onClose: (code) => process.exit(code),
 });
-child.on("exit", (code) => process.exit(code ?? 0));
