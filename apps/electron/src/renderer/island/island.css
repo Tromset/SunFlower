@@ -19,7 +19,13 @@ body {
   border-radius: 0 0 16px 16px;
   padding: 9px 18px 10px;
   box-shadow: var(--shadow-panel-overlay);
+  /* Masquée à idle : la fenêtre elle-même se cache peu après (voir
+     windows/island.ts) — ce fondu ne fait que l'annoncer/l'adoucir. */
+  opacity: 0;
   transition: opacity var(--dur) var(--ease);
+}
+#island:not(.state-idle) {
+  opacity: 1;
 }
 
 #icon {

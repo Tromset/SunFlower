@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import { CH, type MicErrorCode, type SunflowerBridge } from "../shared/ipc";
 import type { PermissionId } from "../shared/state";
 import type { SunflowerConfig } from "../shared/config-schema";
+import type { AgentDecision } from "../shared/agents";
 
 function on(
   channel: string,
@@ -39,6 +40,15 @@ const bridge: SunflowerBridge = {
   downloadWhisper: () => ipcRenderer.invoke(CH.whisperDownload),
   onboardingDone: () => ipcRenderer.invoke(CH.onboardingDone),
   quit: () => ipcRenderer.invoke(CH.appQuit),
+  onAgentsChanged: (cb) =>
+    on(CH.agentsChanged, cb as (...a: unknown[]) => void),
+  agentsList: () => ipcRenderer.invoke(CH.agentsList),
+  agentStart: (task: string, workdir: string) =>
+    ipcRenderer.invoke(CH.agentStart, task, workdir),
+  agentGet: (id: string) => ipcRenderer.invoke(CH.agentGet, id),
+  agentDecide: (id: string, path: string, decision: AgentDecision) =>
+    ipcRenderer.invoke(CH.agentDecide, id, path, decision),
+  agentCancel: (id: string) => ipcRenderer.invoke(CH.agentCancel, id),
 };
 
 contextBridge.exposeInMainWorld("sunflower", bridge);

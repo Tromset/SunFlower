@@ -127,15 +127,27 @@ struct BlueCursorView: View {
         self.isFirstAppearance = isFirstAppearance
         self.companionManager = companionManager
 
-        
-        
+
+
         let mouseLocation = NSEvent.mouseLocation
         let localX = mouseLocation.x - screenFrame.origin.x
         let localY = screenFrame.height - (mouseLocation.y - screenFrame.origin.y)
         _cursorPosition = State(initialValue: CGPoint(x: localX + 35, y: localY + 25))
         _isCursorOnThisScreen = State(initialValue: screenFrame.contains(mouseLocation))
+        _lastPolledMouseLocation = State(initialValue: mouseLocation)
     }
     @State private var timer: Timer?
+
+
+
+    @State private var lastPolledMouseLocation: CGPoint
+    @State private var lastMouseMovementTime: Date = Date()
+
+
+
+    private let cursorPollActiveInterval: TimeInterval = 0.016
+    private let cursorPollIdleInterval: TimeInterval = 1.0 / 8.0
+    private let cursorMovementIdleThreshold: TimeInterval = 0.5
     @State private var welcomeText: String = ""
     @State private var showWelcome: Bool = true
     @State private var bubbleSize: CGSize = .zero
@@ -318,7 +330,7 @@ struct BlueCursorView: View {
                 )
 
             
-            BlueCursorWaveformView(audioPowerLevel: companionManager.currentAudioPowerLevel, cursorColor: cursorAccentColor)
+            BlueCursorWaveformView(audioPowerLevel: companionManager.currentAudioPowerLevel, cursorColor: cursorAccentColor, isActive: companionManager.voiceState == .listening)
                 .opacity(buddyIsVisibleOnThisScreen && companionManager.voiceState == .listening ? cursorOpacity : 0)
                 .position(cursorPosition)
                 .animation(.spring(response: 0.2, dampingFraction: 0.6, blendDuration: 0), value: cursorPosition)
@@ -403,14 +415,28 @@ struct BlueCursorView: View {
     
 
     private func startTrackingCursor() {
-        timer = Timer.scheduledTimer(withTimeInterval: 0.016, repeats: true) { _ in
+        scheduleCursorPoll(after: cursorPollActiveInterval)
+    }
+
+
+
+
+
+    private func scheduleCursorPoll(after interval: TimeInterval) {
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { _ in
             let mouseLocation = NSEvent.mouseLocation
             self.isCursorOnThisScreen = self.screenFrame.contains(mouseLocation)
 
-            
-            
-            
-            
+
+            if mouseLocation != self.lastPolledMouseLocation {
+                self.lastPolledMouseLocation = mouseLocation
+                self.lastMouseMovementTime = Date()
+            }
+
+
+
+
+
             if self.buddyNavigationMode == .navigatingToTarget && self.isReturningToCursor {
                 let currentMouseInSwiftUI = self.convertScreenPointToSwiftUICoordinates(mouseLocation)
                 let distanceFromNavigationStart = hypot(
@@ -418,21 +444,21 @@ struct BlueCursorView: View {
                     currentMouseInSwiftUI.y - self.cursorPositionWhenNavigationStarted.y
                 )
                 if distanceFromNavigationStart > 100 {
-                    cancelNavigationAndResumeFollowing()
+                    self.cancelNavigationAndResumeFollowing()
                 }
-                return
+            } else if self.buddyNavigationMode == .followingCursor {
+
+                let swiftUIPosition = self.convertScreenPointToSwiftUICoordinates(mouseLocation)
+                let buddyX = swiftUIPosition.x + 35
+                let buddyY = swiftUIPosition.y + 25
+                self.cursorPosition = CGPoint(x: buddyX, y: buddyY)
             }
 
-            
-            if self.buddyNavigationMode != .followingCursor {
-                return
-            }
 
-            
-            let swiftUIPosition = self.convertScreenPointToSwiftUICoordinates(mouseLocation)
-            let buddyX = swiftUIPosition.x + 35
-            let buddyY = swiftUIPosition.y + 25
-            self.cursorPosition = CGPoint(x: buddyX, y: buddyY)
+
+            let isRecentlyMoving = Date().timeIntervalSince(self.lastMouseMovementTime) < self.cursorMovementIdleThreshold
+            let nextInterval = isRecentlyMoving ? self.cursorPollActiveInterval : self.cursorPollIdleInterval
+            self.scheduleCursorPoll(after: nextInterval)
         }
     }
 
@@ -715,34 +741,52 @@ private struct BlueCursorWaveformView: View {
     let audioPowerLevel: CGFloat
     let cursorColor: Color
 
+    let isActive: Bool
+
     private let barCount = 5
     private let listeningBarProfile: [CGFloat] = [0.4, 0.7, 1.0, 0.7, 0.4]
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 36.0)) { timelineContext in
-            HStack(alignment: .center, spacing: 2) {
-                ForEach(0..<barCount, id: \.self) { barIndex in
-                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                        .fill(cursorColor)
-                        .frame(
-                            width: 2,
-                            height: barHeight(
-                                for: barIndex,
-                                timelineDate: timelineContext.date
-                            )
-                        )
+        Group {
+
+            if isActive {
+                TimelineView(.animation(minimumInterval: 1.0 / 36.0)) { timelineContext in
+                    waveformBars(timelineDate: timelineContext.date)
                 }
+            } else {
+
+                waveformBars(timelineDate: nil)
             }
-            .shadow(color: cursorColor.opacity(0.45), radius: 5, x: 0, y: 0)
-            .animation(.linear(duration: 0.08), value: audioPowerLevel)
+        }
+        .shadow(color: cursorColor.opacity(0.45), radius: 5, x: 0, y: 0)
+        .animation(.linear(duration: 0.08), value: audioPowerLevel)
+    }
+
+    private func waveformBars(timelineDate: Date?) -> some View {
+        HStack(alignment: .center, spacing: 2) {
+            ForEach(0..<barCount, id: \.self) { barIndex in
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(cursorColor)
+                    .frame(
+                        width: 2,
+                        height: barHeight(
+                            for: barIndex,
+                            timelineDate: timelineDate
+                        )
+                    )
+            }
         }
     }
 
-    private func barHeight(for barIndex: Int, timelineDate: Date) -> CGFloat {
-        let animationPhase = CGFloat(timelineDate.timeIntervalSinceReferenceDate * 3.6) + CGFloat(barIndex) * 0.35
+    private func barHeight(for barIndex: Int, timelineDate: Date?) -> CGFloat {
         let normalizedAudioPowerLevel = max(audioPowerLevel - 0.008, 0)
         let easedAudioPowerLevel = pow(min(normalizedAudioPowerLevel * 2.85, 1), 0.76)
         let reactiveHeight = easedAudioPowerLevel * 10 * listeningBarProfile[barIndex]
+        guard let timelineDate else {
+
+            return 3 + reactiveHeight
+        }
+        let animationPhase = CGFloat(timelineDate.timeIntervalSinceReferenceDate * 3.6) + CGFloat(barIndex) * 0.35
         let idlePulse = (sin(animationPhase) + 1) / 2 * 1.5
         return 3 + reactiveHeight + idlePulse
     }

@@ -47,6 +47,17 @@ class AISDK {
     
     
     
+    // Extracts the `error` field from a `{ "error": string }` JSON body, if present.
+    private static func parseErrorField(fromJSONBody body: String) -> String? {
+        guard let data = body.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let message = (json["error"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !message.isEmpty else {
+            return nil
+        }
+        return message
+    }
+
     private func detectImageMediaType(for imageData: Data) -> String {
         
         if imageData.count >= 4 {
@@ -166,10 +177,15 @@ class AISDK {
                 errorBodyChunks.append(line)
             }
             let errorBody = errorBodyChunks.joined(separator: "\n")
+            // Pre-stream failures (bad/missing Ollama model, Ollama unreachable) are
+            // reported as `{ "error": string }` on a non-200 response before any bytes
+            // are streamed — see the /chat error-contract comment in the server's
+            // routes/chat.ts. Prefer that clean message over the raw JSON body.
+            let message = Self.parseErrorField(fromJSONBody: errorBody) ?? "API Error (\(httpResponse.statusCode)): \(errorBody)"
             throw NSError(
                 domain: "AISDK",
                 code: httpResponse.statusCode,
-                userInfo: [NSLocalizedDescriptionKey: "API Error (\(httpResponse.statusCode)): \(errorBody)"]
+                userInfo: [NSLocalizedDescriptionKey: message]
             )
         }
 
@@ -216,6 +232,17 @@ class AISDK {
             } else if eventType == "tool-output-available",
                       let toolName = eventPayload["toolName"] as? String {
                 await onToolActivity?(toolName, false)
+            } else if eventType == "error" {
+
+
+                let rawErrorText = (eventPayload["errorText"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let errorText = (rawErrorText?.isEmpty == false) ? rawErrorText! : "The assistant ran into a problem."
+                throw NSError(
+                    domain: "AISDK",
+                    code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: errorText]
+                )
             }
 
             if let textChunk {

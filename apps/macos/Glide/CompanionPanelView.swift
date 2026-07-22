@@ -500,6 +500,12 @@ struct CompanionPanelView: View {
                     .padding(.horizontal, 16)
             }
 
+            Spacer()
+                .frame(height: 16)
+
+            analyticsOptInRow
+                .padding(.horizontal, 16)
+
             if !companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
                 Spacer()
                     .frame(height: 16)
@@ -508,6 +514,42 @@ struct CompanionPanelView: View {
                     .padding(.horizontal, 16)
             }
         }
+    }
+
+    // Telemetry defaults to OFF. This toggle is the only way to turn it on —
+    // PostHog is never initialised and no event is ever sent unless this is
+    // switched on (see GlideAnalytics.isEnabled / CompanionManager.setAnalyticsOptedIn).
+    private var analyticsOptInRow: some View {
+        HStack {
+            HStack(spacing: 8) {
+                Image(systemName: "chart.bar")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(DS.Colors.textTertiary)
+                    .frame(width: 16)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Share anonymous usage data")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(DS.Colors.textSecondary)
+
+                    Text("Off by default. Nothing is sent unless you enable this.")
+                        .font(.system(size: 10))
+                        .foregroundColor(DS.Colors.textTertiary)
+                }
+            }
+
+            Spacer()
+
+            Toggle("", isOn: Binding(
+                get: { companionManager.isAnalyticsOptedIn },
+                set: { companionManager.setAnalyticsOptedIn($0) }
+            ))
+            .toggleStyle(.switch)
+            .labelsHidden()
+            .tint(DS.Colors.accent)
+            .scaleEffect(0.8)
+        }
+        .padding(.vertical, 6)
     }
 
     private var agentsTabContent: some View {

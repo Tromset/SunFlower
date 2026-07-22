@@ -33,6 +33,7 @@
 		28F22CBF2F56440300A0FC59 /* Glide.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Glide.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		28F22CCC2F56440300A0FC59 /* GlideTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GlideTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		28F22CD62F56440300A0FC59 /* GlideUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GlideUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA00BB0A2F65000A0039DA55 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -84,6 +85,7 @@
 		28F22CB62F56440300A0FC59 = {
 			isa = PBXGroup;
 			children = (
+				AA00BB0A2F65000A0039DA55 /* Config.xcconfig */,
 				28F22CC12F56440300A0FC59 /* Glide */,
 				28F22CCF2F56440300A0FC59 /* GlideTests */,
 				28F22CD92F56440300A0FC59 /* GlideUITests */,
@@ -408,17 +410,16 @@
 		};
 		28F22CE12F56440300A0FC59 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = AA00BB0A2F65000A0039DA55 /* Config.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLERK_CALLBACK_SCHEME = glide;
-				CLERK_PUBLISHABLE_KEY = pk_test_aGVhbHRoeS1wcmF3bi01MS5jbGVyay5hY2NvdW50cy5kZXYk;
 				CLERK_REDIRECT_URL = "glide://callback";
 				CODE_SIGN_ENTITLEMENTS = Glide/Glide.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = YSMRA5WYS5;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -450,17 +451,16 @@
 		};
 		28F22CE22F56440300A0FC59 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = AA00BB0A2F65000A0039DA55 /* Config.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLERK_CALLBACK_SCHEME = glide;
-				CLERK_PUBLISHABLE_KEY = pk_test_aGVhbHRoeS1wcmF3bi01MS5jbGVyay5hY2NvdW50cy5kZXYk;
 				CLERK_REDIRECT_URL = "glide://callback";
 				CODE_SIGN_ENTITLEMENTS = Glide/Glide.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = YSMRA5WYS5;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;

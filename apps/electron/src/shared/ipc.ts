@@ -5,6 +5,11 @@ import type {
   StatePayload,
 } from "./state";
 import type { SunflowerConfig } from "./config-schema";
+import type {
+  AgentDecision,
+  AgentRun,
+  AgentRunSummary,
+} from "./agents";
 
 /** Canaux main → renderer (webContents.send). */
 export const CH = {
@@ -19,10 +24,19 @@ export const CH = {
   guideStep: "sf:guide-step",
   panelData: "sf:panel-data",
   flip: "sf:flip",
+  agentsChanged: "sf:agents-changed",
+  // Le rond des agents demande au panneau de s'ouvrir sur l'onglet agents.
+  panelFocusAgents: "sf:panel-focus-agents",
   // renderer → main (send)
   micData: "sf:mic-data",
   micError: "sf:mic-error",
   ttsEnded: "sf:tts-ended",
+  // Glisser vertical du rond des agents (voir windows/agent-orb.ts).
+  agentOrbHoverStart: "sf:agent-orb:hover-start",
+  agentOrbHoverEnd: "sf:agent-orb:hover-end",
+  agentOrbDragStart: "sf:agent-orb:drag-start",
+  agentOrbDragMove: "sf:agent-orb:drag-move",
+  agentOrbDragEnd: "sf:agent-orb:drag-end",
   // renderer → main (invoke)
   permissionsGet: "sf:permissions:get",
   permissionsRequest: "sf:permissions:request",
@@ -32,6 +46,12 @@ export const CH = {
   whisperDownload: "sf:whisper:download",
   onboardingDone: "sf:onboarding:done",
   appQuit: "sf:app:quit",
+  agentsList: "sf:agents:list",
+  agentStart: "sf:agents:start",
+  agentGet: "sf:agents:get",
+  agentDecide: "sf:agents:decide",
+  agentCancel: "sf:agents:cancel",
+  agentOrbOpen: "sf:agent-orb:open",
 } as const;
 
 export interface MicDataPayload {
@@ -65,6 +85,8 @@ export interface SunflowerBridge {
   onGuideStep(cb: (p: GuideStepPayload) => void): Unsubscribe;
   onPanelData(cb: (d: PanelData) => void): Unsubscribe;
   onFlip(cb: (side: "left" | "right") => void): Unsubscribe;
+  onAgentsChanged(cb: (runs: AgentRunSummary[]) => void): Unsubscribe;
+  onPanelFocusAgents(cb: () => void): Unsubscribe;
   sendMicData(pcm: Float32Array, sampleRate: number): void;
   sendMicError(code: MicErrorCode): void;
   sendTtsEnded(): void;
@@ -76,6 +98,25 @@ export interface SunflowerBridge {
   downloadWhisper(): Promise<void>;
   onboardingDone(): Promise<void>;
   quit(): Promise<void>;
+  // Agents de code en arrière-plan (revue accept/deny obligatoire).
+  agentsList(): Promise<AgentRunSummary[]>;
+  agentStart(task: string, workdir: string): Promise<AgentRunSummary>;
+  agentGet(id: string): Promise<AgentRun | null>;
+  agentDecide(
+    id: string,
+    path: string,
+    decision: AgentDecision,
+  ): Promise<AgentRun | null>;
+  agentCancel(id: string): Promise<void>;
+  // Petit rond des agents en arrière-plan (docké au bord droit de l'écran,
+  // visible uniquement le temps qu'un agent tourne — voir windows/agent-orb.ts).
+  agentOrbHoverStart(): void;
+  agentOrbHoverEnd(): void;
+  agentOrbDragStart(screenY: number): void;
+  agentOrbDragMove(screenY: number): void;
+  agentOrbDragEnd(screenY: number): void;
+  /** Clic (sans glisser) : ouvre le panneau sur l'onglet agents. */
+  agentOrbOpen(): Promise<void>;
 }
 
 declare global {

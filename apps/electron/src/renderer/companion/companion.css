@@ -70,3 +70,226 @@ body.flip #row {
   vertical-align: -2px;
   animation: sfCaret 1s steps(1) infinite;
 }
+
+/* ── Abeilles « thinking » ─────────────────────────────────────────────
+   Les anciens points de réflexion deviennent 2-3 petites abeilles pixel qui
+   tournent autour de la tête du tournesol. Tout est en CSS : hors état
+   thinking, #flower n'a pas la classe .thinking, .bees reste en display:none
+   et aucune animation ne tourne (pas de timer/rAF qui fuit). Le reset
+   prefers-reduced-motion de base.css les fige aussi. */
+.bees {
+  display: none;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+#flower.thinking .bees {
+  display: block;
+}
+
+.bee {
+  position: absolute;
+  left: 22px;
+  top: 40px;
+  /* centre le sprite 14×11 sur le point d'orbite */
+  margin: -5px 0 0 -7px;
+  animation: sfBeeOrbit var(--bee-dur, 3.6s) linear infinite;
+}
+.bee-sprite {
+  display: block;
+  animation: sfBeeBob 1.3s ease-in-out infinite;
+}
+
+/* Trois abeilles : rayons, vitesses et phases légèrement différents pour que
+   ça respire (la 2e tourne en sens inverse). */
+.bee-1 {
+  --rx: 15px;
+  --ry: 12px;
+  --bee-dur: 3.6s;
+  animation-delay: -0.2s;
+}
+.bee-2 {
+  --rx: 23px;
+  --ry: 9px;
+  --bee-dur: 4.4s;
+  animation-delay: -1.6s;
+  animation-direction: reverse;
+}
+.bee-3 {
+  --rx: 11px;
+  --ry: 15px;
+  --bee-dur: 3s;
+  animation-delay: -2.7s;
+}
+.bee-2 .bee-sprite {
+  animation-duration: 1.05s;
+}
+.bee-3 .bee-sprite {
+  animation-duration: 1.5s;
+}
+
+/* Orbite elliptique (8 points → cercle lisse) autour du point d'ancrage.
+   Les abeilles restent droites (translation seule, pas de rotation). */
+@keyframes sfBeeOrbit {
+  0% {
+    transform: translate(var(--rx), 0);
+  }
+  12.5% {
+    transform: translate(calc(var(--rx) * 0.707), calc(var(--ry) * -0.707));
+  }
+  25% {
+    transform: translate(0, calc(var(--ry) * -1));
+  }
+  37.5% {
+    transform: translate(calc(var(--rx) * -0.707), calc(var(--ry) * -0.707));
+  }
+  50% {
+    transform: translate(calc(var(--rx) * -1), 0);
+  }
+  62.5% {
+    transform: translate(calc(var(--rx) * -0.707), calc(var(--ry) * 0.707));
+  }
+  75% {
+    transform: translate(0, var(--ry));
+  }
+  87.5% {
+    transform: translate(calc(var(--rx) * 0.707), calc(var(--ry) * 0.707));
+  }
+  100% {
+    transform: translate(var(--rx), 0);
+  }
+}
+
+/* Léger tangage vertical, désynchronisé de l'orbite. */
+@keyframes sfBeeBob {
+  0%,
+  100% {
+    transform: translateY(0.5px);
+  }
+  50% {
+    transform: translateY(-1.5px);
+  }
+}
+
+/* ── Vignettes d'activité ──────────────────────────────────────────────
+   Scènes « coding / reading / working » (voir sunflower-pixels.ts). Comme les
+   abeilles, tout est en CSS et scoppé sous la classe de pose portée par
+   #flower : dès que la pose change, la classe part, l'animation s'arrête (aucun
+   timer/rAF qui fuit). Le reset prefers-reduced-motion de base.css les fige.
+   transform-box: fill-box → l'origine des transforms est calée sur la boîte de
+   chaque groupe SVG (translate/rotate en unités du viewBox, ~4.25× à l'écran). */
+#flower.coding .sf-typer,
+#flower.reading .sf-magnify,
+#flower.working .sf-wrench {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+/* coding : l'écran scintille et la fleur pianote. */
+#flower.coding .sf-glow {
+  opacity: 0.4;
+  animation: sfScreenFlicker 2.4s steps(1, end) infinite;
+}
+#flower.coding .sf-typer {
+  animation: sfTyping 2.2s ease-in-out infinite;
+}
+@keyframes sfScreenFlicker {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  12% {
+    opacity: 0.24;
+  }
+  18% {
+    opacity: 0.5;
+  }
+  42% {
+    opacity: 0.3;
+  }
+  58% {
+    opacity: 0.46;
+  }
+  72% {
+    opacity: 0.22;
+  }
+  86% {
+    opacity: 0.4;
+  }
+}
+@keyframes sfTyping {
+  0%,
+  54%,
+  100% {
+    transform: translateY(0);
+  }
+  60% {
+    transform: translateY(0.45px);
+  }
+  67% {
+    transform: translateY(0);
+  }
+  74% {
+    transform: translateY(0.55px);
+  }
+  81% {
+    transform: translateY(0);
+  }
+}
+
+/* reading : la loupe balaie le document. */
+#flower.reading .sf-magnify {
+  animation: sfScan 3s ease-in-out infinite;
+}
+@keyframes sfScan {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(1.4px, 0.3px);
+  }
+  50% {
+    transform: translate(0.5px, -0.2px);
+  }
+  75% {
+    transform: translate(-0.4px, 0.3px);
+  }
+}
+
+/* working : la clé oscille et des étincelles clignotent. */
+#flower.working .sf-wrench {
+  animation: sfWrench 1.5s ease-in-out infinite;
+}
+#flower.working .sf-spark {
+  animation: sfSpark 1.5s steps(1, end) infinite;
+}
+@keyframes sfWrench {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  35% {
+    transform: rotate(-16deg);
+  }
+  55% {
+    transform: rotate(-4deg);
+  }
+  80% {
+    transform: rotate(5deg);
+  }
+}
+@keyframes sfSpark {
+  0%,
+  30% {
+    opacity: 0;
+  }
+  40%,
+  55% {
+    opacity: 1;
+  }
+  65%,
+  100% {
+    opacity: 0;
+  }
+}

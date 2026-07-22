@@ -21,7 +21,7 @@ The backend is a small Hono API running on a Cloudflare Worker. It handles:
 
 Only the **language model** is local. Transcription (AssemblyAI), speech (Gradium), auth (Clerk) and app integrations (Composio) are still hosted services, and each is optional in the sense that the feature it powers simply won't work without its key.
 
-> **Inherited telemetry:** the macOS app still contains the upstream project's analytics — `apps/macos/Glide/GlideAnalytics.swift` initialises PostHog with a hardcoded key on every launch (events include your messages and the AI's responses), and the onboarding flow in `CompanionManager.swift` sends the email you enter to the upstream author's form endpoint. If you don't want your usage reported to the upstream project's analytics, remove or gate those two call sites before building.
+> **Telemetry is opt-in and off by default:** the macOS app inherited the upstream project's PostHog analytics (events include your messages and the AI's responses), but it's now gated behind an explicit "Share anonymous usage data" toggle (Home tab of the menu-bar panel), backed by the `analyticsOptIn` UserDefaults key. Until you turn it on, `apps/macos/Glide/GlideAnalytics.swift` never initialises PostHog and never sends an event — every capture call site re-checks the flag, not just setup. The onboarding flow's old behavior of POSTing the email you enter to the upstream author's personal form endpoint (`submit-form.com`) has been removed entirely; that call sent PII to a third party and was never made opt-in.
 
 ## Architecture
 
@@ -197,7 +197,21 @@ CLERK_REDIRECT_URL      # usually glide://callback
 
 If `GLIDE_SERVER_BASE_URL` is unset, the app falls back to `http://localhost:8787`.
 
-> **The project ships with the upstream author's values baked in.** `project.pbxproj` carries a `CLERK_PUBLISHABLE_KEY` for the upstream Clerk dev instance and the upstream `DEVELOPMENT_TEAM` ids. If you build without changing them, the app will authenticate against someone else's Clerk application and every server call will 401 (your server uses *your* Clerk secret). Replace `CLERK_PUBLISHABLE_KEY` in the `Glide` target's Build Settings (User-Defined section) with the publishable key from the same Clerk application as your `CLERK_SECRET_KEY`.
+`CLERK_PUBLISHABLE_KEY` and `DEVELOPMENT_TEAM` (your Apple Developer Team ID, used for code signing) are **not** committed — they live in a gitignored `apps/macos/Config.xcconfig` that the `Glide` target's Debug and Release build configurations load as their base configuration. Without that file the build fails immediately (`Config.xcconfig: No such file or directory`) instead of silently signing with, or authenticating against, someone else's credentials.
+
+Set it up:
+
+```bash
+cd apps/macos
+cp Config.xcconfig.example Config.xcconfig
+```
+
+Then edit `Config.xcconfig` and fill in:
+
+- `CLERK_PUBLISHABLE_KEY` — the publishable key from the same Clerk application as your server's `CLERK_SECRET_KEY`. Using a different Clerk app's key means every server call 401s.
+- `DEVELOPMENT_TEAM` — your Apple Developer Team ID (Signing & Capabilities > Team in Xcode, or [developer.apple.com/account](https://developer.apple.com/account) under Membership). A free personal team works for local development.
+
+`Config.xcconfig.example` documents each key, including the optional `GLIDE_SERVER_BASE_URL` override.
 
 Then:
 
@@ -206,9 +220,8 @@ open apps/macos/Glide.xcodeproj
 ```
 
 1. Select the `Glide` scheme.
-2. Set your signing team under Signing & Capabilities.
-3. Replace `CLERK_PUBLISHABLE_KEY` in Build Settings, as above.
-4. Cmd + R.
+2. Confirm your signing team under Signing & Capabilities matches `DEVELOPMENT_TEAM`.
+3. Cmd + R.
 
 Sunflower appears in the menu bar. Sign in, grant the screen-recording and microphone permissions it asks for, and hold your push-to-talk key.
 
@@ -301,7 +314,9 @@ If you do this, **put authentication in front of Ollama.** The Ollama API has no
 
 **First reply is very slow.** Ollama loads the model into memory on first use. The Electron app now preloads it at launch and when you start speaking, shows `waking the model…` while it loads, and waits up to ~3 minutes for a cold first token (45 s once warm). If it still times out — `the model is still loading` — warm it manually with `ollama run <model>` or switch to a smaller vision model such as `minicpm-v`.
 
-**The app connects but answers come back empty.** This is almost always Ollama-side: the configured model isn't pulled, or Ollama isn't running. `/chat` still responds HTTP 200 in that case — the error travels *inside* the stream as an `error` event, which the app currently doesn't display. Check the Worker logs (`pnpm run dev:server` prints the Ollama error, e.g. `model 'qwen3-vl:8b' not found`), confirm Ollama is up (`curl http://localhost:11434/api/tags`), and confirm `OLLAMA_MODEL` names a model you have actually pulled — Ollama does not pull on demand.
+**The app connects but answers come back empty.** `/chat` checks Ollama before it starts streaming, so the two most common causes now come back as a normal HTTP error instead of an empty answer: `503` means it can't reach Ollama at all (not running, wrong `OLLAMA_HOST`); `404` means Ollama is up but the requested model has never been pulled (`OLLAMA_MODEL` names a model you don't actually have — Ollama does not pull on demand). Either way the response body is `{ "error": "…" }` with Ollama's own message where there is one (e.g. `model 'qwen3-vl:8b' not found, try pulling it first`).
+
+If Ollama instead fails *after* streaming has already started — it goes away mid-answer, the model gets unloaded concurrently, or you cancel the request — `/chat` has already committed to HTTP 200, so the failure travels inside the stream as an AI SDK `error` chunk (`{ "type": "error", "errorText": "…" }`) instead of a response status; the app currently doesn't surface that chunk to the user, so the answer just stops. Either way, check the Worker logs (`pnpm run dev:server` prints the Ollama error, e.g. `model 'qwen3-vl:8b' not found`), confirm Ollama is up (`curl http://localhost:11434/api/tags`), and confirm `OLLAMA_MODEL` names a model you have actually pulled.
 
 **Everything returns 401.** Clerk keys in `.dev.vars` and in the Xcode build settings must come from the same Clerk application.
 

@@ -1,6 +1,8 @@
-import { BrowserWindow, app, ipcMain, screen } from "electron";
+import { BrowserWindow, Notification, app, ipcMain, screen } from "electron";
 import { CH, type MicDataPayload, type MicErrorCode } from "../shared/ipc";
-import type { PanelData, PermissionId } from "../shared/state";
+import type { PanelData, PermissionId, StatePayload } from "../shared/state";
+import type { AgentDecision } from "../shared/agents";
+import { createAgentRunner, type AgentRunner } from "./agents/runner";
 import { getConfig, setConfig } from "./config-store";
 import { createGuideRunner } from "./guide-runner";
 import {
@@ -31,12 +33,13 @@ import {
 } from "./stt";
 import { createTray, trayBounds } from "./tray";
 import { createTui, type TuiStatusInfo } from "./tui";
+import { createWatchdog } from "./watchdog";
 import {
   createCompanionController,
   createCompanionWindow,
   type CompanionController,
 } from "./windows/companion";
-import { createIslandWindow } from "./windows/island";
+import { createIslandVisibility, createIslandWindow } from "./windows/island";
 import { createOnboardingWindow } from "./windows/onboarding";
 import { createPanelWindow, togglePanel } from "./windows/panel";
 import {
@@ -56,6 +59,11 @@ async function main(): Promise<void> {
   await app.whenReady();
   if (process.platform === "darwin") app.dock?.hide();
 
+  // Traceur de ressources (CPU/RSS) en tâche de fond : pour attribuer un
+  // futur pic (capture écran, whisper.cpp, fenêtre oubliée, Ollama emballé)
+  // au lieu de deviner. Voir watchdog.ts pour les détails.
+  const watchdog = createWatchdog();
+
   // Interface terminal (bannière, phases, saisie clavier). Sans TTY, simple
   // logs préfixés — l'app packagée ne change pas.
   const tui = createTui();
@@ -71,12 +79,15 @@ async function main(): Promise<void> {
   });
 
   let island: BrowserWindow | null = null;
+  let islandVisibility: ReturnType<typeof createIslandVisibility> | null =
+    null;
   let companion: BrowserWindow | null = null;
   let pointer: BrowserWindow | null = null;
   let panel: BrowserWindow | null = null;
   let onboarding: BrowserWindow | null = null;
   let machine: SessionMachine | null = null;
   let companionCtl: CompanionController | null = null;
+  let agentRunner: AgentRunner | null = null;
   let quitting = false;
 
   const sendTo = (
@@ -126,7 +137,8 @@ async function main(): Promise<void> {
   onContextReset((tokens) => tui.contextReset(tokens));
 
   const showMainSurfaces = () => {
-    island?.showInactive();
+    // L'île reste masquée à idle : sa visibilité est pilotée par les états
+    // diffusés (voir broadcastIsland ci-dessous), pas par ce démarrage.
     companion?.showInactive();
     if (!companionCtl && companion) {
       companionCtl = createCompanionController(companion);
@@ -160,6 +172,20 @@ async function main(): Promise<void> {
   ipcMain.handle(CH.appQuit, () => {
     app.quit();
   });
+  // Agents de code : toute écriture disque passe par agentDecide (accept).
+  ipcMain.handle(CH.agentsList, () => agentRunner?.list() ?? []);
+  ipcMain.handle(CH.agentStart, (_e, task: string, workdir: string) =>
+    agentRunner?.start(String(task), String(workdir)),
+  );
+  ipcMain.handle(CH.agentGet, (_e, id: string) => agentRunner?.get(id) ?? null);
+  ipcMain.handle(
+    CH.agentDecide,
+    (_e, id: string, filePath: string, decision: AgentDecision) =>
+      agentRunner?.decide(id, filePath, decision) ?? null,
+  );
+  ipcMain.handle(CH.agentCancel, (_e, id: string) => {
+    agentRunner?.cancel(id);
+  });
   ipcMain.handle(CH.onboardingDone, () => {
     setConfig({ onboarded: true });
     if (onboarding && !onboarding.isDestroyed()) {
@@ -173,6 +199,15 @@ async function main(): Promise<void> {
 
   // ---- Fenêtres --------------------------------------------------------
   island = await createIslandWindow();
+  islandVisibility = createIslandVisibility(island);
+  // Envoi de l'état à l'île + pilotage de sa visibilité (masquée à idle,
+  // affichée dès qu'on en sort, avec délai de grâce au retour — voir
+  // windows/island.ts). Point de passage unique utilisé par la machine à
+  // états et par l'ambiance des agents en arrière-plan.
+  const broadcastIsland = (payload: StatePayload) => {
+    sendTo(island, CH.state, payload);
+    islandVisibility?.setState(payload.island);
+  };
   companion = await createCompanionWindow();
   pointer = await createPointerWindow();
   panel = await createPanelWindow();
@@ -199,7 +234,7 @@ async function main(): Promise<void> {
 
   machine = createSessionMachine({
     broadcast: (payload) => {
-      sendTo(island, CH.state, payload);
+      broadcastIsland(payload);
       sendTo(companion, CH.state, payload);
       tui.state(payload);
     },
@@ -244,6 +279,71 @@ async function main(): Promise<void> {
     guideStep: (payload) => {
       sendTo(companion, CH.guideStep, payload);
       tui.guideStep(payload.index, payload.total, payload.text);
+    },
+  });
+
+  // ---- Agents de code en arrière-plan ----------------------------------
+  // L'île/le compagnon ne sont touchés qu'au repos : dès qu'une session
+  // vocale démarre, la machine à états reprend la main sur l'affichage.
+  let agentIdleTimer: NodeJS.Timeout | null = null;
+  let agentNote: string | null = null;
+  const broadcastAmbient = (payload: StatePayload) => {
+    broadcastIsland(payload);
+    sendTo(companion, CH.state, payload);
+  };
+  agentRunner = createAgentRunner({
+    onUpdate: () => {
+      sendTo(panel, CH.agentsChanged, agentRunner?.list() ?? []);
+    },
+    onRunningChange: (running) => {
+      if (agentIdleTimer) {
+        clearTimeout(agentIdleTimer);
+        agentIdleTimer = null;
+      }
+      if (machine?.busy()) return;
+      if (running) {
+        broadcastAmbient({
+          island: "acting",
+          // Vignette « coding » : tournesol + portable animé.
+          pose: "coding",
+          message: "coding agent at work…",
+        });
+      } else if (agentNote) {
+        // Petit mot de fin sur l'île, puis retour au repos.
+        broadcastAmbient({ island: "acting", pose: "idle", message: agentNote });
+        agentNote = null;
+        agentIdleTimer = setTimeout(() => {
+          if (!machine?.busy() && !agentRunner?.running()) {
+            broadcastAmbient({ island: "idle", pose: "idle" });
+          }
+        }, 4000);
+      } else {
+        broadcastAmbient({ island: "idle", pose: "idle" });
+      }
+    },
+    onFinished: (run) => {
+      const short =
+        run.task.length > 60 ? `${run.task.slice(0, 57)}…` : run.task;
+      const body =
+        run.status === "awaiting-review"
+          ? `"${short}" — ${run.proposal.length} file(s) to review in the panel.`
+          : run.status === "failed"
+            ? `"${short}" — failed: ${run.error ?? "unknown error"}`
+            : `"${short}" — finished, nothing to apply.`;
+      agentNote =
+        run.status === "awaiting-review"
+          ? "agent finished — review in the panel"
+          : run.status === "failed"
+            ? "agent failed — see the panel"
+            : "agent finished";
+      if (Notification.isSupported()) {
+        const notif = new Notification({ title: "sunflower agent", body });
+        notif.on("click", () => {
+          const bounds = trayBounds();
+          if (panel && bounds && !panel.isVisible()) togglePanel(panel, bounds);
+        });
+        notif.show();
+      }
     },
   });
 
@@ -312,8 +412,11 @@ async function main(): Promise<void> {
     quitting = true;
     tui.dispose();
     machine?.interrupt();
+    agentRunner?.dispose();
     companionCtl?.dispose();
+    islandVisibility?.dispose();
     stopHotkey();
+    watchdog.dispose();
     void freeStt();
   });
 }

@@ -80,6 +80,21 @@ export function ensureBridge(): void {
     downloadWhisper: () => Promise.resolve(),
     onboardingDone: () => Promise.resolve(),
     quit: () => Promise.resolve(),
+    onAgentsChanged: sub("agentsChanged"),
+    agentsList: () => Promise.resolve([]),
+    agentStart: (task: string, workdir: string) =>
+      Promise.resolve({
+        id: "dev",
+        task,
+        workdir,
+        status: "queued" as const,
+        createdAt: Date.now(),
+        files: 0,
+        decided: 0,
+      }),
+    agentGet: () => Promise.resolve(null),
+    agentDecide: () => Promise.resolve(null),
+    agentCancel: () => Promise.resolve(),
   };
   window.sunflower = stub;
 }

@@ -1,0 +1,48 @@
+// Config.xcconfig.example
+//
+// Local build settings for the Glide Xcode project. These are kept out of
+// project.pbxproj (and out of git) because they are per-developer: your own
+// Clerk application, your own Apple Developer Team, optionally your own
+// local server URL.
+//
+// Setup:
+//   1. cp Config.xcconfig.example Config.xcconfig
+//   2. Fill in the values below.
+//   3. Open Glide.xcodeproj — the Glide target's Debug and Release build
+//      configurations already reference Config.xcconfig as their base
+//      configuration, so Xcode picks these up automatically.
+//
+// Config.xcconfig is gitignored. Without it, the Glide target's
+// baseConfigurationReference points at a file that does not exist, so the
+// build fails immediately instead of silently signing with, or
+// authenticating against, someone else's credentials.
+
+// Required. The Clerk publishable key for the Clerk application your
+// server (apps/server, CLERK_SECRET_KEY) is configured with. Must be the
+// publishable key from the SAME Clerk app, or every request will 401.
+// Find it in the Clerk dashboard under API Keys. Injected into
+// Glide/Info.plist as ClerkPublishableKey and read by
+// AppBundleConfiguration.clerkPublishableKey.
+CLERK_PUBLISHABLE_KEY = pk_test_YOUR_CLERK_PUBLISHABLE_KEY_HERE
+
+// Required. Your Apple Developer Team ID, used for code signing
+// (Signing & Capabilities > Team). Find it at
+// https://developer.apple.com/account under Membership, or in Xcode's
+// account settings. A free personal team works for local development.
+DEVELOPMENT_TEAM = YOUR_TEAM_ID_HERE
+
+// Optional. Overrides the Worker base URL the app talks to. Only needed if
+// you are not running the Worker at the default http://localhost:8787
+// (e.g. pnpm run dev:server on a different port, or a deployed Worker).
+// Read by AppBundleConfiguration.serverBaseURL via Info.plist's
+// GlideServerBaseURL key; falls back to http://localhost:8787 if unset.
+// GLIDE_SERVER_BASE_URL = http://localhost:8787
+
+// Optional. The project.pbxproj Build Settings for the Glide target already
+// set these to sane, non-secret defaults (glide / glide://callback) — they
+// are not credentials, so they are not required here. Uncomment only if you
+// need a different URL scheme, and note the matching line still hardcoded
+// in project.pbxproj's target Build Settings will take precedence unless
+// you also remove it there.
+// CLERK_CALLBACK_SCHEME = glide
+// CLERK_REDIRECT_URL = glide://callback

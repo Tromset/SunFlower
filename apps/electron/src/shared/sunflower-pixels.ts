@@ -12,8 +12,11 @@ export interface PixelRect {
 }
 
 export interface PixelLayer {
-  /** Optional SVG transform (pointing rotation, thinking translation). */
+  /** Optional SVG transform (pointing rotation). */
   transform?: string;
+  /** Optional CSS class on the layer's <g> — used by the companion to animate
+      individual parts of an activity vignette (screen glow, magnifier, wrench). */
+  cls?: string;
   rects: PixelRect[];
 }
 
@@ -24,13 +27,14 @@ export interface PixelArt {
 }
 
 const Y = "#FCD232"; // petals
-const YD = "#D3B12F"; // dark sparkle
 const B = "#8B5A2B"; // core
+const BK = "#141413"; // black (bee stripes)
 const G1 = "#458149"; // light stem
 const G2 = "#3C6E41"; // dark stem
 const G3 = "#325A38"; // base
 const O = "#D97757"; // clay accent
 const HL = "#F6E3D7"; // reading glint
+const DK = "#2B2A28"; // hardware near-black (laptop, wrench, loupe rim)
 
 /** Base flower (idle pose), viewBox 8×9. */
 const BASE: PixelRect[] = [
@@ -75,18 +79,10 @@ export const POSES = {
     vb: [8, 9],
     layers: [{ rects: [...BASE, { x: 3, y: 2, w: 1, h: 1, c: HL }] }],
   },
-  thinking: {
-    vb: [11, 11],
-    layers: [
-      {
-        rects: [
-          { x: 8, y: 1, w: 1, h: 1, c: YD },
-          { x: 10, y: 0, w: 1, h: 1, c: Y },
-        ],
-      },
-      { transform: "translate(0,2)", rects: BASE },
-    ],
-  },
+  // Le tournesol de base : les anciens « points » de réflexion sont
+  // désormais des abeilles (BEE) que le companion fait tourner autour de la
+  // tête en CSS (voir companion.css / companion.ts).
+  thinking: { vb: [8, 9], layers: [{ rects: BASE }] },
   answering: { vb: [12, 9], layers: [{ rects: [...BASE, ...SPEECH] }] },
   pointing: {
     vb: [12, 11],
@@ -102,6 +98,128 @@ export const POSES = {
     ],
   },
 } satisfies Record<string, PixelArt>;
+
+/* ── Vignettes d'activité du companion ─────────────────────────────────
+   Petites scènes du tournesol « en train de faire quelque chose », posées à
+   côté de la fleur. Chaque scène range ses parties animables dans une couche
+   à part (cls) : companion.css les anime uniquement tant que #flower porte la
+   classe de la pose (aucune boucle ne fuit hors de l'état). Palette + grille
+   identiques au reste du fichier. viewBox large (≤14) pour rester dans #flower. */
+
+/** « coding » : le tournesol tape sur un petit portable, l'écran clignote
+    (glow) et la fleur pianote (petit rebond). */
+export const CODING: PixelArt = {
+  vb: [14, 9],
+  layers: [
+    // La fleur qui pianote (rebond en CSS via .sf-typer).
+    { cls: "sf-typer", rects: BASE },
+    // Le portable : châssis + écran + lignes de « code » aux couleurs de la
+    // palette (comme une coloration syntaxique).
+    {
+      rects: [
+        { x: 8, y: 7, w: 6, h: 1, c: DK }, // socle / clavier
+        { x: 8, y: 2, w: 6, h: 5, c: DK }, // cadre de l'écran
+        { x: 9, y: 3, w: 4, h: 3, c: BK }, // dalle
+        { x: 9, y: 3, w: 2, h: 1, c: O }, // ligne de code
+        { x: 9, y: 4, w: 3, h: 1, c: G1 }, // ligne de code
+        { x: 9, y: 5, w: 2, h: 1, c: Y }, // ligne de code
+        { x: 12, y: 4, w: 1, h: 1, c: HL }, // curseur
+      ],
+    },
+    // Halo de l'écran (opacité modulée en CSS → scintillement).
+    { cls: "sf-glow", rects: [{ x: 9, y: 3, w: 4, h: 3, c: HL }] },
+  ],
+};
+
+/** « reading » : le tournesol examine un document avec une loupe qui balaie la
+    page (analyse de la capture d'écran). */
+export const READING: PixelArt = {
+  vb: [14, 9],
+  layers: [
+    { rects: BASE },
+    // La feuille et ses lignes de texte.
+    {
+      rects: [
+        { x: 8, y: 5, w: 6, h: 4, c: HL }, // page
+        { x: 9, y: 5, w: 3, h: 1, c: B }, // texte
+        { x: 9, y: 6, w: 4, h: 1, c: B }, // texte
+        { x: 9, y: 7, w: 2, h: 1, c: B }, // texte
+      ],
+    },
+    // La loupe (balayage gauche/droite en CSS via .sf-magnify).
+    {
+      cls: "sf-magnify",
+      rects: [
+        { x: 10, y: 3, w: 2, h: 1, c: DK }, // monture haut
+        { x: 10, y: 6, w: 2, h: 1, c: DK }, // monture bas
+        { x: 9, y: 4, w: 1, h: 2, c: DK }, // monture gauche
+        { x: 12, y: 4, w: 1, h: 2, c: DK }, // monture droite
+        { x: 10, y: 4, w: 2, h: 2, c: HL }, // verre
+        { x: 10, y: 5, w: 2, h: 1, c: B }, // texte grossi
+        { x: 12, y: 6, w: 1, h: 1, c: B }, // manche
+        { x: 13, y: 7, w: 1, h: 1, c: B }, // manche
+      ],
+    },
+  ],
+};
+
+/** « working » : tournesol casqué qui serre un boulon avec une clé (exécution
+    d'un outil / d'une action). La clé oscille, une étincelle clignote. */
+export const WORKING: PixelArt = {
+  vb: [14, 9],
+  layers: [
+    // Fleur + casque de chantier (clay).
+    {
+      rects: [
+        ...BASE,
+        { x: 2, y: 0, w: 4, h: 1, c: O }, // dôme du casque
+        { x: 1, y: 1, w: 6, h: 1, c: O }, // bord du casque
+      ],
+    },
+    // Le boulon serré (fixe, la clé tourne autour).
+    { rects: [{ x: 11, y: 3, w: 1, h: 1, c: B }] },
+    // La clé (oscillation en CSS via .sf-wrench).
+    {
+      cls: "sf-wrench",
+      rects: [
+        { x: 10, y: 4, w: 3, h: 1, c: DK }, // tête
+        { x: 10, y: 3, w: 1, h: 1, c: DK }, // mâchoire gauche
+        { x: 12, y: 3, w: 1, h: 1, c: DK }, // mâchoire droite
+        { x: 11, y: 5, w: 1, h: 1, c: DK }, // col
+        { x: 11, y: 6, w: 1, h: 2, c: DK }, // manche
+        { x: 11, y: 6, w: 1, h: 1, c: HL }, // reflet
+      ],
+    },
+    // Étincelles de travail (clignotent en CSS via .sf-spark).
+    {
+      cls: "sf-spark",
+      rects: [
+        { x: 13, y: 2, w: 1, h: 1, c: HL },
+        { x: 9, y: 3, w: 1, h: 1, c: HL },
+      ],
+    },
+  ],
+};
+
+/** Petite abeille pixel (animation « thinking » du companion) : corps rayé
+    jaune/noir avec une tête sombre et deux ailes claires. viewBox 4×3. */
+export const BEE: PixelArt = {
+  vb: [4, 3],
+  layers: [
+    {
+      rects: [
+        // ailes
+        { x: 1, y: 0, w: 1, h: 1, c: HL },
+        { x: 2, y: 0, w: 1, h: 1, c: HL },
+        // corps : tête sombre puis rayures jaune / noir
+        { x: 0, y: 1, w: 1, h: 2, c: BK },
+        { x: 1, y: 1, w: 1, h: 2, c: Y },
+        { x: 2, y: 1, w: 1, h: 2, c: BK },
+        { x: 3, y: 1, w: 1, h: 2, c: Y },
+      ],
+    },
+  ],
+};
 
 /** Menu-bar icon using the proper sunflower palette (yellow petals, brown core, green stem). */
 function menubarArt(core: string): PixelArt {
@@ -174,9 +292,14 @@ export function pixelArtSvg(
             `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="${r.c}"></rect>`,
         )
         .join("");
-      return layer.transform
-        ? `<g transform="${layer.transform}">${rects}</g>`
-        : rects;
+      if (!layer.transform && !layer.cls) return rects;
+      const attrs = [
+        layer.cls ? `class="${layer.cls}"` : "",
+        layer.transform ? `transform="${layer.transform}"` : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return `<g ${attrs}>${rects}</g>`;
     })
     .join("");
   return `<svg viewBox="0 0 ${vw} ${vh}" width="${width}" height="${height}" shape-rendering="crispEdges" aria-hidden="true" ${extraAttrs}>${layers}</svg>`;

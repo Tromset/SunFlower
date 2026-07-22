@@ -78,10 +78,40 @@
       </section>
 
       <section id="view-agents" hidden>
-        <p class="agents-empty">
-          agents are coming soon — your connected apps, driven by voice,
-          without anything leaving home.
-        </p>
+        <div id="agents-main">
+          <div class="section">
+            <span class="section-label">new agent</span>
+            <textarea
+              id="agent-task"
+              rows="3"
+              placeholder="describe a coding task…"
+              spellcheck="false"
+            ></textarea>
+            <input
+              id="agent-dir"
+              type="text"
+              placeholder="/path/to/project"
+              spellcheck="false"
+            />
+            <button id="agent-run" type="button">run in background</button>
+            <p id="agent-form-error" class="agent-error" hidden></p>
+          </div>
+          <div class="section">
+            <span class="section-label">runs</span>
+            <div id="agent-list"></div>
+            <p id="agents-empty" class="agents-empty" hidden>
+              no agents yet — describe a task above; it runs in the
+              background, then you review every file before anything is
+              written.
+            </p>
+          </div>
+        </div>
+        <div id="agent-review" hidden>
+          <button id="review-back" type="button">&larr; back</button>
+          <p id="review-task" class="review-task"></p>
+          <p id="review-status" class="review-status"></p>
+          <div id="review-files"></div>
+        </div>
       </section>
 
       <div class="divider footer-divider"></div>

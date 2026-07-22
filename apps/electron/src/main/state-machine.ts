@@ -283,7 +283,9 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
       // Capture immediately: the screen is still in the state the user describes.
       capturePromise = deps.capture();
       phase = "processing";
-      deps.broadcast({ island: "reading", pose: "thinking" });
+      // Vignette « reading » : loupe au-dessus d'un document pendant l'analyse
+      // de la capture d'écran.
+      deps.broadcast({ island: "reading", pose: "reading" });
       deps.micStop();
       const id = seq;
       micTimer = setTimeout(() => {
@@ -332,7 +334,9 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
       const id = ++seq;
       clearTimers();
       phase = "processing";
-      deps.broadcast({ island: "reading", pose: "thinking" });
+      // Vignette « reading » : loupe au-dessus d'un document pendant l'analyse
+      // de la capture d'écran.
+      deps.broadcast({ island: "reading", pose: "reading" });
       // Capture immédiate, sans toucher capturePromise/micSeen (voie vocale).
       void (async () => {
         const shot = await deps.capture();

@@ -99,7 +99,9 @@ final class CompanionManager: ObservableObject {
         return GradiumTTSClient(proxyURL: "\(Self.workerBaseURL)/tts")
     }()
 
-    
+    private let responseOverlayManager = CompanionResponseOverlayManager()
+
+
     
     private var conversationHistory: [(userTranscript: String, assistantResponse: String)] = []
 
@@ -134,9 +136,23 @@ final class CompanionManager: ObservableObject {
         UserDefaults.standard.set(color.rawValue, forKey: "selectedCursorColor")
     }
 
-    
-    
-    
+
+
+
+    // Telemetry opt-in. Defaults to OFF (UserDefaults.bool defaults to false
+    // for an unset key) — PostHog is never initialised and no analytics
+    // event is ever sent unless the user explicitly turns this on. See
+    // GlideAnalytics.isEnabled, which every capture call site re-checks.
+    @Published var isAnalyticsOptedIn: Bool = GlideAnalytics.isEnabled
+
+    func setAnalyticsOptedIn(_ enabled: Bool) {
+        isAnalyticsOptedIn = enabled
+        GlideAnalytics.updateOptIn(enabled)
+    }
+
+
+
+
     @Published var isGlideCursorEnabled: Bool = UserDefaults.standard.object(forKey: "isGlideCursorEnabled") == nil
         ? true
         : UserDefaults.standard.bool(forKey: "isGlideCursorEnabled")
@@ -175,18 +191,19 @@ final class CompanionManager: ObservableObject {
         hasSubmittedEmail = true
         UserDefaults.standard.set(true, forKey: "hasSubmittedEmail")
 
-        
-        PostHogSDK.shared.identify(trimmedEmail, userProperties: [
-            "email": trimmedEmail
-        ])
-
-        
-        Task {
-            var request = URLRequest(url: URL(string: "https://submit-form.com/RWbGJxmIs")!)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try? JSONSerialization.data(withJSONObject: ["email": trimmedEmail])
-            _ = try? await URLSession.shared.data(for: request)
+        // Analytics identify is gated behind the telemetry opt-in like every
+        // other PostHog call site — off by default, never sent unless the
+        // user explicitly enabled it.
+        //
+        // This used to also POST the raw email address to the upstream
+        // author's personal form endpoint (submit-form.com/RWbGJxmIs). That
+        // sent PII to a third party outside our control and has been removed
+        // entirely — it is not gated behind analyticsOptIn because it should
+        // never have existed, opt-in or not.
+        if GlideAnalytics.isEnabled {
+            PostHogSDK.shared.identify(trimmedEmail, userProperties: [
+                "email": trimmedEmail
+            ])
         }
     }
 
@@ -672,9 +689,15 @@ final class CompanionManager: ObservableObject {
 
                 do {
                     if pointingSequence.isEmpty {
-                        if !spokenText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        let trimmedSpokenText = spokenText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmedSpokenText.isEmpty {
                             voiceState = .responding
                             try await speakAndWait(spokenText)
+                        } else {
+                            // The stream ended without an `error` event but also without any
+                            // usable content (no text, no pointing) — dead air from the user's
+                            // perspective. Surface it instead of silently doing nothing.
+                            await presentCompanionError("Glide didn't get a response that time. Please try again.")
                         }
                     } else {
                         for step in pointingSequence {
@@ -706,11 +729,11 @@ final class CompanionManager: ObservableObject {
                     print("Gradium TTS error: \(error)")
                 }
             } catch is CancellationError {
-                
+
             } catch {
                 GlideAnalytics.trackResponseError(error: error.localizedDescription)
                 print("Companion response error: \(error)")
-                
+                await presentCompanionError(error.localizedDescription)
             }
 
             if !Task.isCancelled {
@@ -774,6 +797,28 @@ final class CompanionManager: ObservableObject {
         while gradiumTTSClient.isPlaying {
             try await Task.sleep(nanoseconds: 100_000_000)
         }
+    }
+
+    // Surfaces a /chat failure to the user instead of leaving them with dead
+    // air: shows the (full) error text in the companion response overlay
+    // near the cursor, and speaks a short line so a user who isn't looking
+    // at the screen still hears that something went wrong. Called for both
+    // in-stream `error` events (see AISDK.analyzeImageStreaming) and thrown
+    // failures (network down, Ollama unreachable, etc).
+    private func presentCompanionError(_ rawMessage: String) async {
+        let trimmedMessage = rawMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayMessage = trimmedMessage.isEmpty ? "Something went wrong. Please try again." : trimmedMessage
+        print("Companion response error shown to user: \(displayMessage)")
+
+        responseOverlayManager.showOverlayAndBeginStreaming()
+        responseOverlayManager.updateStreamingText(displayMessage)
+        responseOverlayManager.finishStreaming()
+
+        voiceState = .responding
+        let spokenLine = displayMessage.count > 140
+            ? "sorry, i ran into a problem answering that."
+            : displayMessage
+        try? await speakAndWait(spokenLine)
     }
 
     
