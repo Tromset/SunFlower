@@ -127,6 +127,38 @@ document.getElementById("quit")!.addEventListener("click", () => {
   void window.sunflower.quit();
 });
 
+// ---- Compagnon : roam ↔ dock ------------------------------------------
+// Même état que le menu du tray et le double-clic sur la fleur ; on passe par
+// la bascule partagée (companionToggleDock) pour ne garder qu'une seule source
+// de vérité (companionMode dans la config).
+const segRoam = document.getElementById("seg-roam")!;
+const segDock = document.getElementById("seg-dock")!;
+
+function renderCompanionMode(docked: boolean): void {
+  segRoam.classList.toggle("active", !docked);
+  segDock.classList.toggle("active", docked);
+}
+
+function applyCompanionMode(targetDocked: boolean): void {
+  // Déjà dans l'état voulu : ne rien basculer (la bascule est un toggle).
+  if (segDock.classList.contains("active") === targetDocked) return;
+  void window.sunflower.companionToggleDock().then(async () => {
+    // onCompanionDocked ne se déclenche que si la fenêtre du compagnon est
+    // vivante ; on relit la config pour refléter l'état dans tous les cas.
+    const cfg = await window.sunflower.getConfig();
+    renderCompanionMode(cfg.companionMode === "docked");
+  });
+}
+
+segRoam.addEventListener("click", () => applyCompanionMode(false));
+segDock.addEventListener("click", () => applyCompanionMode(true));
+
+// Rester synchro quand la bascule vient d'ailleurs (tray, double-clic).
+window.sunflower.onCompanionDocked(renderCompanionMode);
+void window.sunflower
+  .getConfig()
+  .then((cfg) => renderCompanionMode(cfg.companionMode === "docked"));
+
 // ---- Agents de code en arrière-plan ------------------------------------
 // Rien n'est écrit sur disque depuis cette vue sans un clic accept explicite,
 // fichier par fichier (agentDecide côté main).

@@ -208,6 +208,42 @@ header {
   color: var(--cream);
 }
 
+/* ---- Bascule du compagnon : roam ↔ dock (contrôle segmenté) ---- */
+.seg {
+  display: flex;
+  padding: 2px;
+  background: rgba(254, 249, 237, 0.06);
+  border: 1px solid var(--border-on-dark);
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+.seg-btn {
+  flex: 1;
+  text-align: center;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 6px 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-on-dark-mute);
+  cursor: pointer;
+}
+.seg-btn:not(.active):hover {
+  color: var(--cream);
+}
+.seg-btn.active {
+  background: rgba(252, 210, 50, 0.12);
+  color: var(--yellow);
+  cursor: default;
+}
+.seg-hint {
+  display: block;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-on-dark-mute);
+}
+
 .agents-empty {
   padding: 10px 0 4px;
   font-size: 12.5px;
