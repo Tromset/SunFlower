@@ -94,7 +94,8 @@ When launched from a terminal (`npm start` or `sunflower`), sunflower turns it i
 - Voice sessions render live too: `listening…`, `looking at your screen…`, your transcribed question, a spinner while the model thinks, then the streamed answer with its duration.
 - On a cold start the spinner says `waking the model…` instead of failing — sunflower preloads the model when the app launches and again the moment you start speaking, and allows up to ~3 minutes for the first token of a cold load.
 - **Every 10 000 tokens of context, a fresh chat starts automatically.** The Ollama runner survives from one question to the next (`keep_alive` + prompt cache), and with small local vision models that accumulated state degrades answers over a long session — early questions read the screen perfectly, later ones start hallucinating. Sunflower counts the tokens each answer really consumed (as reported by Ollama) and, past 10k, prints `✦ … starting a fresh chat`, unloads the model — discarding all of its state — and preloads it again in the background while you read the answer.
-- **Ctrl+C** interrupts the current answer; at an idle prompt it quits the app. Set `SUNFLOWER_DEBUG=1` for full error details.
+- **Native whisper.cpp/Metal logs never reach the terminal.** whisper.cpp re-initialises its state (Metal context included) on every transcription and logs the whole process to stderr — dozens of `whisper_*` / `ggml_*` lines per question. The launcher filters them out into `~/Library/Application Support/sunflower/logs/native.log` (rotated at 5 MB) so the terminal only shows the dialogue; anything else written to stderr (real errors) still comes through.
+- **Ctrl+C** interrupts the current answer; at an idle prompt it quits the app. Set `SUNFLOWER_DEBUG=1` for full error details and the raw, unfiltered native logs.
 - Without a TTY (packaged app, redirected output) all of this degrades to plain `[sunflower]` log lines — nothing else changes.
 
 ### Pointing
