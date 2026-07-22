@@ -2,7 +2,10 @@ import { contextBridge, ipcRenderer } from "electron";
 import { CH, type MicErrorCode, type SunflowerBridge } from "../shared/ipc";
 import type { PermissionId } from "../shared/state";
 import type { SunflowerConfig } from "../shared/config-schema";
-import type { AgentDecision } from "../shared/agents";
+import type {
+  AgentCommandDecision,
+  AgentDecision,
+} from "../shared/agents";
 
 function on(
   channel: string,
@@ -42,13 +45,19 @@ const bridge: SunflowerBridge = {
   quit: () => ipcRenderer.invoke(CH.appQuit),
   onAgentsChanged: (cb) =>
     on(CH.agentsChanged, cb as (...a: unknown[]) => void),
+  onAgentEvent: (cb) => on(CH.agentEvent, cb as (...a: unknown[]) => void),
   onPanelFocusAgents: (cb) => on(CH.panelFocusAgents, cb),
   agentsList: () => ipcRenderer.invoke(CH.agentsList),
-  agentStart: (task: string, workdir: string) =>
-    ipcRenderer.invoke(CH.agentStart, task, workdir),
+  agentStart: (task: string, workdir: string, allowCommands: boolean) =>
+    ipcRenderer.invoke(CH.agentStart, task, workdir, allowCommands),
   agentGet: (id: string) => ipcRenderer.invoke(CH.agentGet, id),
   agentDecide: (id: string, path: string, decision: AgentDecision) =>
     ipcRenderer.invoke(CH.agentDecide, id, path, decision),
+  agentCommand: (
+    id: string,
+    commandId: number,
+    decision: AgentCommandDecision,
+  ) => ipcRenderer.invoke(CH.agentCommand, id, commandId, decision),
   agentCancel: (id: string) => ipcRenderer.invoke(CH.agentCancel, id),
   // Petit rond des agents (voir main/windows/agent-orb.ts).
   onAgentOrbReset: (cb: () => void) =>

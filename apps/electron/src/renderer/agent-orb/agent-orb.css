@@ -43,7 +43,9 @@ body {
   display: inline-flex;
   transform-origin: 50% 100%;
 }
-#dock.active #orb-icon {
+/* La fleur ne se balance que pendant une activité réelle (appel modèle en
+   vol, commande en cours) — pas pendant les attentes (file, clic, revue). */
+#dock.working #orb-icon {
   animation: sfSway 4s ease-in-out infinite;
 }
 
@@ -72,13 +74,20 @@ body {
   opacity: 0;
   transition: opacity var(--dur) var(--ease);
 }
+/* Anneau visible mais immobile pendant les attentes (file, clic humain,
+   revue) : le rond signale un run sans mimer un travail qui n'a pas lieu. */
 #dock.active #orb::before {
+  opacity: 0.35;
+}
+/* Il ne tourne que pendant une activité réelle (piloté par les événements
+   du run : appel modèle en vol, commande en cours d'exécution). */
+#dock.working #orb::before {
   opacity: 0.9;
   animation: sfOrbSpin 2.2s linear infinite;
 }
 
-/* Pulsation douce de l'auréole jaune tant qu'un agent travaille. */
-#dock.active #orb {
+/* Pulsation douce de l'auréole jaune pendant cette même activité réelle. */
+#dock.working #orb {
   animation: sfOrbPulse 2.4s ease-in-out infinite;
 }
 

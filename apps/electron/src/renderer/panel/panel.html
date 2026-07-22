@@ -93,6 +93,13 @@
               placeholder="/path/to/project"
               spellcheck="false"
             />
+            <label class="agent-allow" for="agent-allow-run">
+              <input id="agent-allow-run" type="checkbox" />
+              <span>
+                allow command execution — each command still waits for your
+                explicit approval
+              </span>
+            </label>
             <button id="agent-run" type="button">run in background</button>
             <p id="agent-form-error" class="agent-error" hidden></p>
           </div>
@@ -110,6 +117,8 @@
           <button id="review-back" type="button">&larr; back</button>
           <p id="review-task" class="review-task"></p>
           <p id="review-status" class="review-status"></p>
+          <div id="review-commands"></div>
+          <div id="review-live"></div>
           <div id="review-files"></div>
         </div>
       </section>

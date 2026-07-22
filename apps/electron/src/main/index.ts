@@ -1,7 +1,10 @@
 import { BrowserWindow, Notification, app, ipcMain, screen } from "electron";
 import { CH, type MicDataPayload, type MicErrorCode } from "../shared/ipc";
 import type { PanelData, PermissionId, StatePayload } from "../shared/state";
-import type { AgentDecision } from "../shared/agents";
+import type {
+  AgentCommandDecision,
+  AgentDecision,
+} from "../shared/agents";
 import { createAgentRunner, type AgentRunner } from "./agents/runner";
 import {
   createAgentOrbController,
@@ -203,16 +206,28 @@ async function main(): Promise<void> {
   ipcMain.handle(CH.appQuit, () => {
     app.quit();
   });
-  // Agents de code : toute écriture disque passe par agentDecide (accept).
+  // Agents de code : toute écriture disque passe par agentDecide (accept),
+  // toute exécution de commande par agentCommand (approve) — jamais sans clic.
   ipcMain.handle(CH.agentsList, () => agentRunner?.list() ?? []);
-  ipcMain.handle(CH.agentStart, (_e, task: string, workdir: string) =>
-    agentRunner?.start(String(task), String(workdir)),
+  ipcMain.handle(
+    CH.agentStart,
+    (_e, task: string, workdir: string, allowCommands: boolean) =>
+      agentRunner?.start(String(task), String(workdir), Boolean(allowCommands)),
   );
   ipcMain.handle(CH.agentGet, (_e, id: string) => agentRunner?.get(id) ?? null);
   ipcMain.handle(
     CH.agentDecide,
     (_e, id: string, filePath: string, decision: AgentDecision) =>
       agentRunner?.decide(id, filePath, decision) ?? null,
+  );
+  ipcMain.handle(
+    CH.agentCommand,
+    (_e, id: string, commandId: number, decision: AgentCommandDecision) =>
+      agentRunner?.decideCommand(
+        String(id),
+        Number(commandId),
+        decision === "approved" ? "approved" : "denied",
+      ) ?? null,
   );
   ipcMain.handle(CH.agentCancel, (_e, id: string) => {
     agentRunner?.cancel(id);
@@ -367,6 +382,12 @@ async function main(): Promise<void> {
       sendTo(panel, CH.agentsChanged, runs);
       // Même charge utile pour le rond : il en tire le titre + l'état courant.
       orbCtl?.setStatus(runs);
+    },
+    // Événements fins (tours, tokens, lectures, commandes) : le panneau
+    // streame le transcript/terminal, le rond en dérive son texte d'état.
+    onEvent: (ev) => {
+      sendTo(panel, CH.agentEvent, ev);
+      orbCtl?.pushEvent(ev);
     },
     onRunningChange: (running) => {
       // Le rond suit l'état de la file, indépendamment d'une session vocale.

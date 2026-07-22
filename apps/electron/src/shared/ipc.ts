@@ -6,7 +6,9 @@ import type {
 } from "./state";
 import type { SunflowerConfig } from "./config-schema";
 import type {
+  AgentCommandDecision,
   AgentDecision,
+  AgentEvent,
   AgentRun,
   AgentRunSummary,
 } from "./agents";
@@ -25,6 +27,9 @@ export const CH = {
   panelData: "sf:panel-data",
   flip: "sf:flip",
   agentsChanged: "sf:agents-changed",
+  // Événement fin d'un run d'agent (tour, token, lecture, commande…) —
+  // diffusé au panneau et au rond pendant le travail réel (voir AgentEvent).
+  agentEvent: "sf:agents:event",
   // Le rond des agents demande au panneau de s'ouvrir sur l'onglet agents.
   panelFocusAgents: "sf:panel-focus-agents",
   // Le compagnon passe en badge docké (ou en sort) : le renderer compacte
@@ -58,6 +63,8 @@ export const CH = {
   agentStart: "sf:agents:start",
   agentGet: "sf:agents:get",
   agentDecide: "sf:agents:decide",
+  // Décision utilisateur sur UNE commande proposée (exécuter / refuser).
+  agentCommand: "sf:agents:command",
   agentCancel: "sf:agents:cancel",
   agentOrbOpen: "sf:agent-orb:open",
   // Double-clic sur la fleur : bascule follow ↔ docked (persisté en config).
@@ -96,6 +103,8 @@ export interface SunflowerBridge {
   onPanelData(cb: (d: PanelData) => void): Unsubscribe;
   onFlip(cb: (side: "left" | "right") => void): Unsubscribe;
   onAgentsChanged(cb: (runs: AgentRunSummary[]) => void): Unsubscribe;
+  /** Événements fins pendant un run (tours, tokens, lectures, commandes). */
+  onAgentEvent(cb: (ev: AgentEvent) => void): Unsubscribe;
   onPanelFocusAgents(cb: () => void): Unsubscribe;
   /** Le compagnon vient d'être docké (true) ou libéré (false). */
   onCompanionDocked(cb: (docked: boolean) => void): Unsubscribe;
@@ -112,12 +121,22 @@ export interface SunflowerBridge {
   quit(): Promise<void>;
   // Agents de code en arrière-plan (revue accept/deny obligatoire).
   agentsList(): Promise<AgentRunSummary[]>;
-  agentStart(task: string, workdir: string): Promise<AgentRunSummary>;
+  agentStart(
+    task: string,
+    workdir: string,
+    allowCommands: boolean,
+  ): Promise<AgentRunSummary>;
   agentGet(id: string): Promise<AgentRun | null>;
   agentDecide(
     id: string,
     path: string,
     decision: AgentDecision,
+  ): Promise<AgentRun | null>;
+  /** Exécuter/refuser UNE commande proposée (run en awaiting-command). */
+  agentCommand(
+    id: string,
+    commandId: number,
+    decision: AgentCommandDecision,
   ): Promise<AgentRun | null>;
   agentCancel(id: string): Promise<void>;
   // Petit rond des agents en arrière-plan (docké au bord droit de l'écran,
