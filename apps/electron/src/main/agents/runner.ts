@@ -548,7 +548,13 @@ export function createAgentRunner(deps: AgentRunnerDeps): AgentRunner {
       });
     });
     commandWaiters.delete(run.id);
-    if (ctrl.signal.aborted) throw new Error("cancelled");
+    if (ctrl.signal.aborted) {
+      // Run annulé pendant l'attente du clic : la commande n'a jamais tourné,
+      // le record le dit clairement au lieu de rester « pending » à jamais.
+      record.status = "denied";
+      record.note = "run cancelled";
+      throw new Error("cancelled");
+    }
     run.status = "running";
     if (!approved) {
       record.status = "denied";
