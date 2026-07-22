@@ -52,6 +52,8 @@ export interface MachineDeps {
   onQuestion?(question: string, source: QuestionSource): void;
   /** Détail d'une erreur de session (diagnostic terminal). */
   onSessionError?(context: "transcription" | "ollama", err: unknown): void;
+  /** Diagnostic du pointage (marqueur brut → cadre), SUNFLOWER_DEBUG. */
+  onPointerDebug?(line: string): void;
 }
 
 export interface SessionMachine {
@@ -161,22 +163,28 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
     deps.broadcast({ island: "thinking", pose: "thinking" });
     deps.answerReset();
     abort = new AbortController();
-    const parser = createAnswerParser({
-      onText: (text) => {
-        if (id === seq) deps.answerToken(text);
+    const parser = createAnswerParser(
+      {
+        onText: (text) => {
+          if (id === seq) deps.answerToken(text);
+        },
+        onPoint: (point) => {
+          if (id !== seq) return;
+          deps.showPoint(point, shot.display);
+          deps.broadcast({ island: "answering", pose: "pointing" });
+          if (pointPoseTimer) clearTimeout(pointPoseTimer);
+          pointPoseTimer = setTimeout(() => {
+            if (id === seq && phase === "responding") {
+              deps.broadcast({ island: "answering", pose: "answering" });
+            }
+          }, 4000);
+        },
       },
-      onPoint: (point) => {
-        if (id !== seq) return;
-        deps.showPoint(point, shot.display);
-        deps.broadcast({ island: "answering", pose: "pointing" });
-        if (pointPoseTimer) clearTimeout(pointPoseTimer);
-        pointPoseTimer = setTimeout(() => {
-          if (id === seq && phase === "responding") {
-            deps.broadcast({ island: "answering", pose: "answering" });
-          }
-        }, 4000);
+      {
+        imageSize: shot.imageSize,
+        debug: (line) => deps.onPointerDebug?.(line),
       },
-    });
+    );
     let first = true;
     try {
       const full = await deps.chat({

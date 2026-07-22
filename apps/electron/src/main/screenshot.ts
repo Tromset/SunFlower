@@ -4,6 +4,9 @@ import { getConfig, setConfig } from "./config-store";
 export interface Screenshot {
   imageB64: string;
   display: Display;
+  /** Dimensions exactes de l'image envoyée au modèle (px) — référence du
+   *  repli « pixels absolus » du parseur de marqueurs (guide-parser). */
+  imageSize: { width: number; height: number };
   /** Vrai si la miniature vient bien de `display` (correspondance par
    *  display_id, ou écran unique). Faux = repli sources[0] : l'image peut
    *  montrer un AUTRE écran que celui du curseur — interdit pour Work. */
@@ -32,8 +35,11 @@ export async function captureScreenAtCursor(): Promise<Screenshot | null> {
       setConfig({ screenCaptureConfirmed: true });
     }
     return {
-      imageB64: source.thumbnail.toJPEG(80).toString("base64"),
+      // Qualité 90 : les petits libellés restent nets pour le grounding,
+      // le coût d'inférence dépend des dimensions (inchangées), pas du poids.
+      imageB64: source.thumbnail.toJPEG(90).toString("base64"),
       display,
+      imageSize: source.thumbnail.getSize(),
       displayMatched: matched !== undefined || sources.length === 1,
     };
   } catch (err) {
