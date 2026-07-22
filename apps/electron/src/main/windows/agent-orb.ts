@@ -1,6 +1,6 @@
 import { screen, type BrowserWindow, type Display, type Rectangle } from "electron";
 import { CH } from "../../shared/ipc";
-import type { AgentRunSummary } from "../../shared/agents";
+import type { AgentEvent, AgentRunSummary } from "../../shared/agents";
 import { getConfig, setConfig } from "../config-store";
 import { createOverlayWindow, rendererFile } from "./common";
 
@@ -76,6 +76,8 @@ export interface AgentOrbController {
   show(): void;
   hide(): void;
   setStatus(runs: AgentRunSummary[]): void;
+  /** Événement fin du run en cours : le rond en dérive texte + animation. */
+  pushEvent(ev: AgentEvent): void;
   setExpanded(expanded: boolean): void;
   dragStart(screenY: number): void;
   dragMove(screenY: number): void;
@@ -97,6 +99,9 @@ export function createAgentOrbController(
    *  temps que le rond est visible pour que le glisser reste cohérent. */
   let disp = displayAtCursor();
   let lastRuns: AgentRunSummary[] = [];
+  /** Dernier événement non-token : re-poussé quand le rond réapparaît, pour
+   *  qu'il n'affiche pas un mot d'état périmé en attendant le suivant. */
+  let lastEvent: AgentEvent | null = null;
 
   const apply = () => {
     if (!win.isDestroyed()) win.setBounds(boundsFor(disp, expanded, ratio));
@@ -136,6 +141,7 @@ export function createAgentOrbController(
       visible = true;
       // Repousser le dernier statut connu au rond fraîchement affiché.
       if (lastRuns.length > 0) win.webContents.send(CH.agentsChanged, lastRuns);
+      if (lastEvent) win.webContents.send(CH.agentEvent, lastEvent);
     },
     hide() {
       if (win.isDestroyed()) return;
@@ -148,6 +154,13 @@ export function createAgentOrbController(
     setStatus(runs) {
       lastRuns = runs;
       if (!win.isDestroyed()) win.webContents.send(CH.agentsChanged, runs);
+    },
+    pushEvent(ev) {
+      // Les paquets de tokens/sortie sont transitoires : inutiles à rejouer.
+      if (ev.kind !== "model-token" && ev.kind !== "command-output") {
+        lastEvent = ev;
+      }
+      if (!win.isDestroyed()) win.webContents.send(CH.agentEvent, ev);
     },
     setExpanded(next) {
       // Pendant un glisser, la largeur est figée pour éviter un saut latéral.

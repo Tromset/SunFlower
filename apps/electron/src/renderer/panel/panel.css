@@ -421,6 +421,131 @@ header {
   text-align: center;
 }
 
+/* ---- Opt-in exécution de commandes (décochée par défaut, par run) ---- */
+.agent-allow {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 0 0 10px;
+  cursor: pointer;
+}
+.agent-allow input {
+  margin: 2px 0 0;
+  accent-color: var(--yellow);
+}
+.agent-allow span {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-on-dark-mute);
+}
+.agent-allow:hover span {
+  color: var(--text-on-dark-soft);
+}
+
+/* ---- Commandes proposées (exécuter/refuser + pseudo-terminal) -------- */
+.cmd-box {
+  border: 1px solid var(--border-on-dark);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.cmd-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(254, 249, 237, 0.05);
+}
+.cmd-line {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--cream);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cmd-state {
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--text-on-dark-mute);
+}
+.cmd-state.running {
+  color: var(--yellow);
+}
+.cmd-state.done {
+  color: #8fd18f;
+}
+.cmd-state.denied,
+.cmd-state.refused,
+.cmd-state.error {
+  color: var(--orange);
+}
+.term {
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10.5px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  background: #0d0c0b;
+  color: #d6d0c4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+.term:empty::before {
+  content: "…";
+  color: var(--text-on-dark-mute);
+}
+
+/* ---- Transcript live pendant le run ---------------------------------- */
+#review-live:not(:empty) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 10px;
+}
+.tr-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tr-role {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-on-dark-mute);
+}
+.tr-entry.assistant .tr-role {
+  color: var(--yellow);
+}
+.tr-text {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--text-on-dark-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+.tr-entry.user .tr-text {
+  color: var(--text-on-dark-mute);
+}
+/* Caret clignotant au bout de la réponse en train de s'écrire. */
+.tr-entry.streaming .tr-text::after {
+  content: "▌";
+  color: var(--yellow);
+  animation: sfCaretBlink 1s steps(1) infinite;
+}
+@keyframes sfCaretBlink {
+  50% {
+    opacity: 0;
+  }
+}
+
 .footer-divider {
   margin-top: 16px;
 }

@@ -204,8 +204,9 @@ const SYSTEM_PROMPT = [
   "Never mention the markers, the step numbers, or any coordinates in your text.",
 ].join(" ");
 
-/** Supprime en flux les blocs <think>…</think> (défensif). */
-function createThinkStripper(): (chunk: string) => string {
+/** Supprime en flux les blocs <think>…</think> (défensif).
+ *  Exporté : le runner d'agents streame aussi ses tours (voir agents/runner). */
+export function createThinkStripper(): (chunk: string) => string {
   let inThink = false;
   let carry = "";
   return (chunk: string): string => {

@@ -5,6 +5,15 @@
 // contenant le contenu complet proposé. Le runner en extrait une proposition
 // {path, before, after} — JAMAIS écrite sur disque ici : l'application est
 // exclusivement déclenchée par decide(), fichier par fichier, depuis la revue.
+//
+// Opt-in au lancement (allowCommands), le modèle peut aussi PROPOSER une
+// commande shell par tour (« RUN: commande »). Trois garde-fous, dans l'ordre :
+// une liste noire non contournable (refus d'office, visible au transcript),
+// puis un clic humain exécuter/refuser OBLIGATOIRE par commande (statut
+// awaiting-command), puis un spawn confiné au dossier du run avec timeout.
+// Chaque étape (tour, token, lecture, commande) est diffusée via onEvent pour
+// que le panneau et le rond montrent le travail réel, pas un spinner figé.
+import { spawn } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -14,9 +23,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import { checkOllama, ollamaHost } from "../ollama";
+import { checkOllama, createThinkStripper, ollamaHost } from "../ollama";
 import type {
+  AgentCommandDecision,
+  AgentCommandRecord,
   AgentDecision,
+  AgentEvent,
+  AgentEventKind,
   AgentFileChange,
   AgentRun,
   AgentRunSummary,
@@ -29,13 +42,22 @@ const MAX_READS_PER_TURN = 4; // fichiers servis par tour
 const MAX_READ_BYTES = 16_000; // au-delà, contenu tronqué
 const MAX_PROPOSAL_FILES = 10; // fichiers max dans une proposition
 const MAX_LISTING_ENTRIES = 150; // arborescence initiale
-const TURN_TIMEOUT_MS = 300_000; // chargement à froid possible
+const TURN_TIMEOUT_MS = 300_000; // premier token (chargement à froid possible)
+const INTER_CHUNK_TIMEOUT_MS = 60_000; // silence entre paquets streamés
+const TOKEN_FLUSH_MS = 100; // regroupe les tokens avant l'IPC (pas 1 event/token)
+const COMMAND_TIMEOUT_MS = 120_000; // par commande approuvée
+const MAX_COMMAND_LENGTH = 400; // au-delà, refus d'office
+const MAX_COMMAND_OUTPUT = 64_000; // sortie gardée sur le record (UI)
+const MAX_COMMAND_FEEDBACK = 4_000; // queue de sortie renvoyée au modèle
+const MAX_OUTPUT_EVENT = 2_000; // borne d'un paquet command-output IPC
 // Contexte plus large que le tchat écran (8192) : les tours accumulent des
 // fichiers. Le runner Ollama redémarre en changeant de num_ctx — acceptable
 // pour un travail d'arrière-plan.
 const NUM_CTX = 16_384;
 const NUM_PREDICT = 2048; // par tour ; borne aussi le coût total (× MAX_TURNS)
 
+// Prompt inchangé quand l'exécution n'est pas autorisée : le comportement
+// propose-only historique reste strictement identique.
 const SYSTEM_PROMPT = [
   "You are sunflower's background coding agent. You run fully locally and work in turns on ONE task inside ONE project folder.",
   "You can NEVER touch the disk: you only propose changes, and a human reviews then accepts or denies each file.",
@@ -48,10 +70,28 @@ const SYSTEM_PROMPT = [
   "Rules: no shell commands, no tools, no markdown outside the formats above. Paths are relative to the project folder; never use .. or absolute paths. Keep the changes minimal and focused on the task. Never claim the changes are applied.",
 ].join("\n");
 
+// Variante opt-in : même contrat, plus le protocole « RUN: … » (les petits
+// modèles locaux ne font pas de function-calling fiable — protocole texte).
+const SYSTEM_PROMPT_WITH_RUN = [
+  "You are sunflower's background coding agent. You run fully locally and work in turns on ONE task inside ONE project folder.",
+  "You can NEVER touch the disk yourself: you only propose changes, and a human reviews then accepts or denies each file.",
+  "To inspect existing files before deciding, reply with ONLY read requests, one per line, nothing else:",
+  "READ: relative/path/to/file",
+  "To run ONE shell command inside the project folder (tests, build, git diff…), reply with ONLY one line:",
+  "RUN: command",
+  "A human must approve every command before it runs (they may deny it), destructive commands are refused outright, and a command never runs outside the project folder. You then receive its exit code and output. Never assume a command ran until you see its result.",
+  "When you know exactly what to change, reply with one short sentence explaining the change, followed by one fenced block PER FILE containing the COMPLETE new content of that file (never a fragment, never a diff):",
+  "```file:relative/path/to/file",
+  "...entire file content...",
+  "```",
+  "Rules: one action per reply (reads, one command, or a proposal), no markdown outside the formats above. Paths are relative to the project folder; never use .. or absolute paths. Keep the changes minimal and focused on the task. Never claim the changes are applied.",
+].join("\n");
+
 // ---- Parsing des réponses du modèle -------------------------------------
 const FILE_BLOCK_RE =
   /```(?:[a-zA-Z0-9_+-]*[ \t]+)?file:[ \t]*([^\n`]+)\n([\s\S]*?)\n?```/g;
 const READ_LINE_RE = /^READ:[ \t]*(.+?)[ \t]*$/gm;
+const RUN_LINE_RE = /^RUN:[ \t]*(.+?)[ \t]*$/gm;
 
 function parseFileBlocks(text: string): { path: string; content: string }[] {
   const out: { path: string; content: string }[] = [];
@@ -71,9 +111,51 @@ function parseReads(text: string): string[] {
   return out.slice(0, MAX_READS_PER_TURN);
 }
 
-/** Supprime les blocs <think>…</think> (réponse non streamée). */
-function stripThink(text: string): string {
-  return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+/** Première ligne « RUN: … » (une seule commande par tour) ; null sinon. */
+function parseRun(text: string): string | null {
+  RUN_LINE_RE.lastIndex = 0;
+  const m = RUN_LINE_RE.exec(text);
+  return m?.[1]?.trim() || null;
+}
+
+// ---- Liste noire des commandes -------------------------------------------
+// Best effort assumé (un shell reste un shell) : le vrai garde-fou est le
+// clic humain obligatoire par commande. Cette liste refuse d'office, sans
+// même proposer le clic, les motifs destructeurs évidents.
+const BLOCKED_COMMANDS: { re: RegExp; why: string }[] = [
+  { re: /\b(sudo|doas)\b/i, why: "privilege escalation" },
+  {
+    // rm avec un drapeau récursif ET un drapeau force dans le même segment,
+    // quel que soit l'ordre ou la forme (-rf, -fr, -r -f, --recursive --force).
+    re: /\brm\b(?=[^|;&]*\s(-[a-zA-Z]*[rR]|--recursive\b))(?=[^|;&]*\s(-[a-zA-Z]*f|--force\b))/,
+    why: "recursive force delete",
+  },
+  { re: /\brm\b[^|;&]*\s(\/|~\/?)([ \t]|$)/, why: "delete at / or ~" },
+  { re: /\bgit\s+push\b[^|;&]*\s(-f|--force(-with-lease)?)\b/i, why: "force push" },
+  { re: /\bgit\s+reset\b[^|;&]*\s--hard\b/i, why: "git reset --hard" },
+  { re: /\bgit\s+clean\b[^|;&]*\s-[a-zA-Z]*[fx]/i, why: "git clean -f/-x" },
+  { re: /\bgit\s+checkout\b[^|;&]*\s(--\s*\.|\.)([ \t]|$)/, why: "checkout over local changes" },
+  {
+    re: /\b(curl|wget)\b[^|;&]*\|[^|;&]*\b(ba|z|da|fi|c|k)?sh\b/i,
+    why: "piping a download into a shell",
+  },
+  { re: /(>|>>)[ \t]*\/dev\/(?!null\b|stdout\b|stderr\b|tty\b)/, why: "writing to a device" },
+  { re: /\bdd\b[^|;&]*\bof=/i, why: "raw disk write (dd)" },
+  { re: /\b(mkfs|fdisk|parted|diskutil|newfs)\b/i, why: "disk formatting/partitioning" },
+  { re: /\b(shutdown|reboot|halt|poweroff)\b/i, why: "system power control" },
+  { re: /\bkill(all)?\b[^|;&]*\s-9\s+-?1\b/, why: "killing all processes" },
+  { re: /:\s*\(\s*\)\s*\{/, why: "fork bomb" },
+  { re: /\bchmod\b[^|;&]*\s(-[a-zA-Z]*R[a-zA-Z]*\s[^|;&]*)?\/([ \t]|$)/, why: "chmod on /" },
+  { re: /\blaunchctl\b|\bsystemctl\b/i, why: "system service control" },
+];
+
+/** Motif destructeur détecté (ou commande hors gabarit) ; null si acceptable. */
+function blockedReason(command: string): string | null {
+  if (command.length > MAX_COMMAND_LENGTH) return "command too long";
+  for (const { re, why } of BLOCKED_COMMANDS) {
+    if (re.test(command)) return why;
+  }
+  return null;
 }
 
 // ---- Sécurité chemins ----------------------------------------------------
@@ -151,10 +233,11 @@ function renderReads(workdir: string, reads: string[]): string {
   return parts.join("\n\n");
 }
 
-// ---- Appel Ollama (non streamé : travail d'arrière-plan) -----------------
+// ---- Appel Ollama (streamé : les tokens partiels remontent via onToken) ---
 async function agentChat(
   messages: AgentTranscriptEntry[],
   signal: AbortSignal,
+  onToken: (text: string) => void,
 ): Promise<string> {
   const status = await checkOllama();
   if (!status.reachable) {
@@ -164,17 +247,27 @@ async function agentChat(
     throw new Error(`model missing — ollama pull ${status.name}`);
   }
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TURN_TIMEOUT_MS);
+  // Premier paquet : budget large (chargement à froid) ; ensuite, un silence
+  // prolongé entre paquets vaut panne — plus juste qu'un plafond global qui
+  // tuerait une génération longue mais saine.
+  let watchdog: NodeJS.Timeout | null = null;
+  const arm = (ms: number) => {
+    if (watchdog) clearTimeout(watchdog);
+    watchdog = setTimeout(() => ctrl.abort(), ms);
+  };
   const onAbort = () => ctrl.abort();
   signal.addEventListener("abort", onAbort, { once: true });
+  const strip = createThinkStripper();
+  let full = "";
   try {
+    arm(TURN_TIMEOUT_MS);
     const res = await fetch(`${ollamaHost()}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       signal: ctrl.signal,
       body: JSON.stringify({
         model: status.name,
-        stream: false,
+        stream: true,
         think: false,
         keep_alive: "10m",
         options: {
@@ -185,23 +278,147 @@ async function agentChat(
         messages,
       }),
     });
-    if (!res.ok) throw new Error(`ollama responded ${res.status}.`);
-    const data = (await res.json()) as {
-      message?: { content?: string };
-      error?: string;
-    };
-    if (data.error) throw new Error(`ollama: ${data.error}`);
-    return stripThink(data.message?.content ?? "");
+    if (!res.ok || !res.body) throw new Error(`ollama responded ${res.status}.`);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      arm(INTER_CHUNK_TIMEOUT_MS);
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let parsed: {
+          message?: { content?: string };
+          done?: boolean;
+          error?: string;
+        };
+        try {
+          parsed = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (parsed.error) throw new Error(`ollama: ${parsed.error}`);
+        const content = strip(parsed.message?.content ?? "");
+        if (content) {
+          full += content;
+          onToken(content);
+        }
+        if (parsed.done) return full.trim();
+      }
+    }
+    return full.trim();
   } finally {
-    clearTimeout(timer);
+    if (watchdog) clearTimeout(watchdog);
     signal.removeEventListener("abort", onAbort);
   }
+}
+
+// ---- Exécution sandboxée d'une commande approuvée -------------------------
+interface CommandResult {
+  exitCode: number | null;
+  errored: boolean;
+  note?: string;
+}
+
+/** Lance la commande via le shell, cwd VERROUILLÉ sur run.workdir, timeout
+ *  propre à la commande, stdout/stderr streamés vers onChunk et accumulés
+ *  (bornés) sur le record. N'est appelée QU'après le clic d'approbation. */
+function runCommand(
+  workdir: string,
+  record: AgentCommandRecord,
+  signal: AbortSignal,
+  onChunk: (text: string) => void,
+): Promise<CommandResult> {
+  return new Promise((resolve) => {
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(record.command, {
+        cwd: workdir, // strict : jamais un autre dossier
+        shell: true,
+        env: process.env,
+        // Groupe de processus dédié (POSIX) : le timeout tue aussi les
+        // petits-enfants (npm → node → …), pas seulement le shell.
+        detached: process.platform !== "win32",
+        windowsHide: true,
+      });
+    } catch (err) {
+      resolve({
+        exitCode: null,
+        errored: true,
+        note: err instanceof Error ? err.message : "spawn failed",
+      });
+      return;
+    }
+    let settled = false;
+    let timedOut = false;
+    let cancelled = false;
+    const killTree = () => {
+      try {
+        if (process.platform !== "win32" && child.pid) {
+          process.kill(-child.pid, "SIGKILL");
+        } else {
+          child.kill("SIGKILL");
+        }
+      } catch {
+        // déjà mort
+      }
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killTree();
+    }, COMMAND_TIMEOUT_MS);
+    const onAbort = () => {
+      cancelled = true;
+      killTree();
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    const finish = (result: CommandResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      resolve(result);
+    };
+    const append = (buf: Buffer) => {
+      const text = buf.toString("utf8");
+      if (record.output.length < MAX_COMMAND_OUTPUT) {
+        const room = MAX_COMMAND_OUTPUT - record.output.length;
+        record.output +=
+          text.length > room
+            ? `${text.slice(0, room)}\n[...output truncated...]`
+            : text;
+      }
+      onChunk(text.length > MAX_OUTPUT_EVENT ? text.slice(0, MAX_OUTPUT_EVENT) : text);
+    };
+    child.stdout?.on("data", append);
+    child.stderr?.on("data", append);
+    child.on("error", (err) =>
+      finish({ exitCode: null, errored: true, note: err.message }),
+    );
+    child.on("close", (code) =>
+      finish({
+        exitCode: code,
+        errored: timedOut || cancelled,
+        ...(timedOut
+          ? { note: `killed after ${COMMAND_TIMEOUT_MS / 1000}s timeout` }
+          : cancelled
+            ? { note: "cancelled" }
+            : {}),
+      }),
+    );
+  });
 }
 
 // ---- Runner ---------------------------------------------------------------
 export interface AgentRunnerDeps {
   /** Un agent a changé d'état (liste du panneau à rafraîchir). */
   onUpdate(run: AgentRun): void;
+  /** Événement fin pendant un run (tour, token, lecture, commande…). */
+  onEvent(ev: AgentEvent): void;
   /** Un agent vient de se terminer (notification + île si repos). */
   onFinished(run: AgentRun): void;
   /** La file est passée active ↔ inactive (pose du compagnon au repos). */
@@ -209,12 +426,20 @@ export interface AgentRunnerDeps {
 }
 
 export interface AgentRunner {
-  /** Enfile une tâche ; l'exécution démarre dès que la file est libre. */
-  start(task: string, workdir: string): AgentRunSummary;
+  /** Enfile une tâche ; l'exécution démarre dès que la file est libre.
+   *  allowCommands (opt-in) autorise le protocole RUN: pour CE run —
+   *  chaque commande attendra quand même un clic explicite. */
+  start(task: string, workdir: string, allowCommands: boolean): AgentRunSummary;
   list(): AgentRunSummary[];
   get(id: string): AgentRun | null;
   /** Revue explicite : accept ⇒ écrit le fichier ; deny ⇒ rien. */
   decide(id: string, filePath: string, decision: AgentDecision): AgentRun | null;
+  /** Clic exécuter/refuser sur LA commande en attente (awaiting-command). */
+  decideCommand(
+    id: string,
+    commandId: number,
+    decision: AgentCommandDecision,
+  ): AgentRun | null;
   /** Annule un agent en file ou en cours (idempotent). */
   cancel(id: string): void;
   running(): boolean;
@@ -224,6 +449,8 @@ export interface AgentRunner {
 export function createAgentRunner(deps: AgentRunnerDeps): AgentRunner {
   const runs: AgentRun[] = [];
   const aborts = new Map<string, AbortController>();
+  /** Résolveur du clic exécuter/refuser en attente, par run. */
+  const commandWaiters = new Map<string, (approved: boolean) => void>();
   let active: AgentRun | null = null;
   let wasRunning = false;
   let counter = 0;
@@ -277,24 +504,153 @@ export function createAgentRunner(deps: AgentRunnerDeps): AgentRunner {
     });
   };
 
+  /** Gère UNE ligne RUN: — liste noire, attente du clic, exécution, retour
+   *  au modèle. Toujours visible au transcript, jamais silencieux. */
+  const handleCommand = async (
+    run: AgentRun,
+    command: string,
+    turn: number,
+    ctrl: AbortController,
+    event: (kind: AgentEventKind, turn: number, detail: string, commandId?: number) => void,
+    push: (entry: AgentTranscriptEntry) => void,
+  ): Promise<void> => {
+    const record: AgentCommandRecord = {
+      id: run.commands.length,
+      command,
+      status: "pending",
+      output: "",
+    };
+    // 1. Liste noire — refus d'office, sans même proposer le clic.
+    const blocked = blockedReason(command);
+    if (blocked) {
+      record.status = "refused";
+      record.note = blocked;
+      run.commands.push(record);
+      push({
+        role: "user",
+        content: `RUN ${command}: refused automatically (${blocked}). This kind of command is never allowed — continue without it.`,
+      });
+      event("command-refused", turn, command, record.id);
+      deps.onUpdate(run);
+      return;
+    }
+    // 2. Clic humain obligatoire — le run s'affiche « awaiting-command ».
+    run.commands.push(record);
+    run.status = "awaiting-command";
+    event("command-request", turn, command, record.id);
+    deps.onUpdate(run);
+    const approved = await new Promise<boolean>((resolve) => {
+      const onAbort = () => resolve(false);
+      ctrl.signal.addEventListener("abort", onAbort, { once: true });
+      commandWaiters.set(run.id, (ok) => {
+        ctrl.signal.removeEventListener("abort", onAbort);
+        resolve(ok);
+      });
+    });
+    commandWaiters.delete(run.id);
+    if (ctrl.signal.aborted) {
+      // Run annulé pendant l'attente du clic : la commande n'a jamais tourné,
+      // le record le dit clairement au lieu de rester « pending » à jamais.
+      record.status = "denied";
+      record.note = "run cancelled";
+      throw new Error("cancelled");
+    }
+    run.status = "running";
+    if (!approved) {
+      record.status = "denied";
+      push({
+        role: "user",
+        content: `RUN ${command}: denied by the user. Continue without running it.`,
+      });
+      event("command-denied", turn, command, record.id);
+      deps.onUpdate(run);
+      return;
+    }
+    // 3. Exécution confinée au dossier du run, sortie streamée.
+    record.status = "running";
+    event("command-start", turn, command, record.id);
+    deps.onUpdate(run);
+    const result = await runCommand(run.workdir, record, ctrl.signal, (chunk) =>
+      event("command-output", turn, chunk, record.id),
+    );
+    if (ctrl.signal.aborted) throw new Error("cancelled");
+    record.status = result.errored ? "error" : "done";
+    record.exitCode = result.exitCode;
+    if (result.note !== undefined) record.note = result.note;
+    event(
+      "command-end",
+      turn,
+      `${command} — exit ${result.exitCode ?? "?"}${result.note ? ` (${result.note})` : ""}`,
+      record.id,
+    );
+    const tail =
+      record.output.length > MAX_COMMAND_FEEDBACK
+        ? `[...truncated...]\n${record.output.slice(-MAX_COMMAND_FEEDBACK)}`
+        : record.output;
+    push({
+      role: "user",
+      content: `RUN ${command}: exited with code ${result.exitCode ?? "unknown"}${result.note ? ` (${result.note})` : ""}.\nOutput:\n\`\`\`\n${tail || "(no output)"}\n\`\`\``,
+    });
+    deps.onUpdate(run);
+  };
+
   const execute = async (run: AgentRun): Promise<void> => {
     const ctrl = new AbortController();
     aborts.set(run.id, ctrl);
+    const event = (
+      kind: AgentEventKind,
+      turn: number,
+      detail: string,
+      commandId?: number,
+    ) =>
+      deps.onEvent({
+        runId: run.id,
+        kind,
+        turn,
+        maxTurns: MAX_TURNS,
+        detail,
+        ...(commandId !== undefined ? { commandId } : {}),
+      });
     run.status = "running";
     deps.onUpdate(run);
+    event("status", 0, "running");
     try {
       const listing = listFiles(run.workdir).join("\n");
       const push = (entry: AgentTranscriptEntry) => run.transcript.push(entry);
-      push({ role: "system", content: SYSTEM_PROMPT });
+      push({
+        role: "system",
+        content: run.allowCommands ? SYSTEM_PROMPT_WITH_RUN : SYSTEM_PROMPT,
+      });
       push({
         role: "user",
         content: `Task: ${run.task}\n\nProject folder listing:\n${listing || "(empty folder)"}`,
       });
       let nudged = false;
       for (let turn = 0; turn < MAX_TURNS; turn++) {
-        const answer = await agentChat(run.transcript, ctrl.signal);
+        const t = turn + 1;
+        event("turn-start", t, "");
+        deps.onUpdate(run);
+        // Tokens partiels regroupés (TOKEN_FLUSH_MS) avant l'IPC.
+        let tokenBuf = "";
+        let tokenFlushAt = 0;
+        const flushTokens = () => {
+          if (!tokenBuf) return;
+          event("model-token", t, tokenBuf);
+          tokenBuf = "";
+        };
+        const answer = await agentChat(run.transcript, ctrl.signal, (text) => {
+          tokenBuf += text;
+          const now = Date.now();
+          if (now - tokenFlushAt >= TOKEN_FLUSH_MS) {
+            tokenFlushAt = now;
+            flushTokens();
+          }
+        });
+        flushTokens();
         if (ctrl.signal.aborted) throw new Error("cancelled");
         push({ role: "assistant", content: answer });
+        event("model-answer", t, answer.slice(0, 200));
+        deps.onUpdate(run);
         const blocks = parseFileBlocks(answer);
         if (blocks.length > 0) {
           const proposal: AgentFileChange[] = [];
@@ -313,21 +669,34 @@ export function createAgentRunner(deps: AgentRunnerDeps): AgentRunner {
           } else {
             run.proposal = proposal;
             run.status = "awaiting-review";
+            event("proposal", t, String(proposal.length));
           }
           return;
         }
         const reads = parseReads(answer);
         if (reads.length > 0) {
           push({ role: "user", content: renderReads(run.workdir, reads) });
+          event("read", t, reads.join(", "));
+          deps.onUpdate(run);
           continue;
+        }
+        // Protocole RUN: — uniquement quand la case était cochée au
+        // lancement ; sinon le comportement historique reste identique.
+        if (run.allowCommands) {
+          const command = parseRun(answer);
+          if (command) {
+            await handleCommand(run, command, t, ctrl, event, push);
+            continue;
+          }
         }
         if (!nudged && turn < MAX_TURNS - 1) {
           // Un seul rappel de format ; ensuite la réponse libre fait foi.
           nudged = true;
           push({
             role: "user",
-            content:
-              "Reply ONLY with READ: lines to inspect files, or with ```file:path fenced blocks holding the complete proposed content.",
+            content: run.allowCommands
+              ? "Reply ONLY with READ: lines to inspect files, one RUN: command line, or with ```file:path fenced blocks holding the complete proposed content."
+              : "Reply ONLY with READ: lines to inspect files, or with ```file:path fenced blocks holding the complete proposed content.",
           });
           continue;
         }
@@ -346,14 +715,16 @@ export function createAgentRunner(deps: AgentRunnerDeps): AgentRunner {
           : "something went wrong.";
     } finally {
       aborts.delete(run.id);
+      commandWaiters.delete(run.id);
       run.finishedAt = Date.now();
       deps.onUpdate(run);
+      event("status", 0, run.status);
       deps.onFinished(run);
     }
   };
 
   return {
-    start(task, workdir) {
+    start(task, workdir, allowCommands) {
       const dir = path.resolve(workdir);
       const run: AgentRun = {
         id: `a${Date.now().toString(36)}-${++counter}`,
@@ -361,9 +732,11 @@ export function createAgentRunner(deps: AgentRunnerDeps): AgentRunner {
         workdir: dir,
         status: "queued",
         createdAt: Date.now(),
+        allowCommands: Boolean(allowCommands),
         transcript: [],
         proposal: [],
         decisions: {},
+        commands: [],
       };
       if (!run.task) {
         run.status = "failed";
@@ -405,6 +778,16 @@ export function createAgentRunner(deps: AgentRunnerDeps): AgentRunner {
       deps.onUpdate(run);
       return run;
     },
+    decideCommand(id, commandId, decision) {
+      const run = runs.find((r) => r.id === id);
+      if (!run || run.status !== "awaiting-command") return run ?? null;
+      const record = run.commands.find((c) => c.id === commandId);
+      if (!record || record.status !== "pending") return run;
+      // Le record et le statut du run sont mis à jour par handleCommand,
+      // au réveil de la promesse — ici on ne fait que trancher.
+      commandWaiters.get(run.id)?.(decision === "approved");
+      return run;
+    },
     cancel(id) {
       const run = runs.find((r) => r.id === id);
       if (!run) return;
@@ -413,7 +796,7 @@ export function createAgentRunner(deps: AgentRunnerDeps): AgentRunner {
         run.error = "cancelled.";
         run.finishedAt = Date.now();
         deps.onUpdate(run);
-      } else if (run.status === "running") {
+      } else if (run.status === "running" || run.status === "awaiting-command") {
         aborts.get(id)?.abort();
       }
     },
