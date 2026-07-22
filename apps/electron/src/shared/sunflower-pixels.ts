@@ -304,3 +304,29 @@ export function pixelArtSvg(
     .join("");
   return `<svg viewBox="0 0 ${vw} ${vh}" width="${width}" height="${height}" shape-rendering="crispEdges" aria-hidden="true" ${extraAttrs}>${layers}</svg>`;
 }
+
+/** Crochets adaptatifs : quatre coins d'un cadre w×h px, épaisseur de bras
+ *  constante (1 cellule de 4 px). Contrairement à `pixelArtSvg(BRACKETS, w, h)`
+ *  qui étirerait les bras avec le cadre, la grille reste uniforme : seule la
+ *  longueur des bras suit (un quart du petit côté, bornée 12–28 px). */
+export function bracketFrameSvg(w: number, h: number): string {
+  const u = 4; // px par cellule (grille pixel-art uniforme)
+  const cols = Math.max(8, Math.round(w / u));
+  const rows = Math.max(6, Math.round(h / u));
+  const arm = Math.min(7, Math.max(3, Math.round(Math.min(cols, rows) / 4)));
+  const rects: PixelRect[] = [
+    // Coin haut-gauche
+    { x: 0, y: 0, w: arm, h: 1, c: O },
+    { x: 0, y: 0, w: 1, h: arm, c: O },
+    // Coin haut-droit
+    { x: cols - arm, y: 0, w: arm, h: 1, c: O },
+    { x: cols - 1, y: 0, w: 1, h: arm, c: O },
+    // Coin bas-gauche
+    { x: 0, y: rows - 1, w: arm, h: 1, c: O },
+    { x: 0, y: rows - arm, w: 1, h: arm, c: O },
+    // Coin bas-droit
+    { x: cols - arm, y: rows - 1, w: arm, h: 1, c: O },
+    { x: cols - 1, y: rows - arm, w: 1, h: arm, c: O },
+  ];
+  return pixelArtSvg({ vb: [cols, rows], layers: [{ rects }] }, cols * u, rows * u);
+}

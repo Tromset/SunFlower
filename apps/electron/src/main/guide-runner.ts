@@ -26,12 +26,17 @@ const GUIDE_IDLE_MS = 150_000;
 const NO_HOOK_ADVANCE_MS = 6000;
 /** Garde défensive — le parseur plafonne déjà. */
 const MAX_STEPS = 8;
+/** Marge entre le bord d'un cadre adaptatif et le tournesol garé. */
+const FLY_CLEARANCE_MARGIN = 24;
 
 export interface GuideRunnerDeps {
   cursor(): { x: number; y: number };
-  showPoint(xPct: number, yPct: number, bounds: Electron.Rectangle): void;
+  showPoint(
+    target: { xPct: number; yPct: number; wPct?: number; hPct?: number },
+    bounds: Electron.Rectangle,
+  ): void;
   hidePoint(): void;
-  flyTo(target: { x: number; y: number }): void;
+  flyTo(target: { x: number; y: number; clearance?: number }): void;
   hold(): void;
   follow(): void;
   onMouseDown(cb: () => void): () => void;
@@ -58,6 +63,13 @@ interface Target {
   y: number;
   xPct: number;
   yPct: number;
+  wPct?: number;
+  hPct?: number;
+  /** Boîte de l'élément en px écran (quand le modèle a donné une taille) :
+   *  l'arrivée « proximité » accepte tout point DANS la boîte, pas seulement
+   *  le rayon autour du centre — une large barre d'outils reste atteignable
+   *  par son bord. */
+  rect?: { x1: number; y1: number; x2: number; y2: number };
 }
 
 export function createGuideRunner(deps: GuideRunnerDeps): GuideRunner {
@@ -99,15 +111,28 @@ export function createGuideRunner(deps: GuideRunnerDeps): GuideRunner {
       let prevTarget: Target | null = null;
       let prevAdvancedAt = 0;
 
-      const targetOf = (step: GuideStep): Target | null =>
-        step.xPct === undefined || step.yPct === undefined
-          ? null
-          : {
-              x: bounds.x + (step.xPct / 100) * bounds.width,
-              y: bounds.y + (step.yPct / 100) * bounds.height,
-              xPct: step.xPct,
-              yPct: step.yPct,
-            };
+      const targetOf = (step: GuideStep): Target | null => {
+        if (step.xPct === undefined || step.yPct === undefined) return null;
+        const t: Target = {
+          x: bounds.x + (step.xPct / 100) * bounds.width,
+          y: bounds.y + (step.yPct / 100) * bounds.height,
+          xPct: step.xPct,
+          yPct: step.yPct,
+        };
+        if (step.wPct !== undefined && step.hPct !== undefined) {
+          t.wPct = step.wPct;
+          t.hPct = step.hPct;
+          const w = (step.wPct / 100) * bounds.width;
+          const h = (step.hPct / 100) * bounds.height;
+          t.rect = {
+            x1: t.x - w / 2,
+            y1: t.y - h / 2,
+            x2: t.x + w / 2,
+            y2: t.y + h / 2,
+          };
+        }
+        return t;
+      };
 
       const armIdle = () => {
         if (idleTimer) clearTimeout(idleTimer);
@@ -140,8 +165,24 @@ export function createGuideRunner(deps: GuideRunnerDeps): GuideRunner {
         const announcedAt = Date.now();
         armIdle();
         if (target) {
-          deps.showPoint(target.xPct, target.yPct, bounds);
-          deps.flyTo(target);
+          deps.showPoint(
+            {
+              xPct: target.xPct,
+              yPct: target.yPct,
+              wPct: target.wPct,
+              hPct: target.hPct,
+            },
+            bounds,
+          );
+          // Cadre adaptatif : le tournesol se gare au-delà de la demi-largeur
+          // du cadre, sinon il atterrirait dessus (voir companion PARK_GAP).
+          deps.flyTo({
+            x: target.x,
+            y: target.y,
+            clearance: target.rect
+              ? (target.rect.x2 - target.rect.x1) / 2 + FLY_CLEARANCE_MARGIN
+              : undefined,
+          });
         } else {
           deps.hidePoint();
           deps.hold();
@@ -165,7 +206,13 @@ export function createGuideRunner(deps: GuideRunnerDeps): GuideRunner {
             if (id !== gen || !running) return;
             if (Date.now() - announcedAt < ARM_PROX_MS) return;
             const p = deps.cursor();
+            // Dans la boîte de l'élément OU dans le rayon autour du centre.
             const near =
+              (target.rect !== undefined &&
+                p.x >= target.rect.x1 &&
+                p.x <= target.rect.x2 &&
+                p.y >= target.rect.y1 &&
+                p.y <= target.rect.y2) ||
               Math.hypot(p.x - target.x, p.y - target.y) <= PROX_RADIUS_PX;
             if (!near) {
               withinSince = 0;

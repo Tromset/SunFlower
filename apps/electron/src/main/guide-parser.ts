@@ -1,12 +1,20 @@
-// Extraction en flux des marqueurs [POINT:x%,y%], [STEP:…], [DONE] et
+// Extraction en flux des marqueurs [POINT:…], [STEP:…], [DONE] et
 // [WORK:…] : le texte affiché/prononcé ne contient jamais de marqueur, même
 // coupé entre deux chunks. Avant tout STEP, comportement historique (intro
 // streamée + POINT unique) ; dès le premier STEP, le texte alimente le plan
 // du guide. [WORK: tâche] signale une corvée que Sunflower Work peut piloter
 // (voir work/runner.ts) — capturé une seule fois, jamais affiché.
+//
+// Coordonnées : le prompt demande une boîte englobante [POINT:x1,y1,x2,y2]
+// en 0–1000 (grounding natif de qwen3-vl), mais le parseur tolère aussi le
+// centre seul à 2 nombres (legacy), les pourcentages (suffixe %), les
+// fractions 0–1 et les pixels de l'image envoyée — voir normalizeMarker.
 export interface PointEvent {
   xPct: number;
   yPct: number;
+  /** Taille de l'élément visé (% écran) — absente : cadre par défaut. */
+  wPct?: number;
+  hPct?: number;
 }
 
 export type StepAdvance = "proximity" | "click";
@@ -14,6 +22,9 @@ export type StepAdvance = "proximity" | "click";
 export interface GuideStep {
   xPct?: number;
   yPct?: number;
+  /** Taille de l'élément visé (% écran), quand le modèle a donné une boîte. */
+  wPct?: number;
+  hPct?: number;
   advance: StepAdvance;
   text: string;
 }
@@ -23,12 +34,23 @@ export interface ParsedGuide {
   outro?: string;
 }
 
-const POINT =
-  /\[POINT:\s*(\d+(?:\.\d+)?)\s*%?\s*,\s*(\d+(?:\.\d+)?)\s*%?\s*\]/i;
-const STEP =
-  /\[STEP(?::\s*(\d+(?:\.\d+)?)\s*%?\s*,\s*(\d+(?:\.\d+)?)\s*%?)?(?:\s*:\s*(click))?\s*\]/i;
+/** Un nombre, suffixe % optionnel. */
+const NUM = String.raw`\d+(?:\.\d+)?\s*%?`;
+/** Liste de 2 à 4 nombres, capturée en UN groupe (splittée en code : les
+ *  groupes positionnels rendraient le dispatch fragile). Répétition bornée
+ *  {1,3} ancrée par virgules : pas de backtracking pathologique. */
+const NUM_LIST = String.raw`(${NUM}(?:\s*,\s*${NUM}){1,3})`;
+const POINT = new RegExp(String.raw`\[POINT:\s*${NUM_LIST}\s*\]`, "i");
+const STEP = new RegExp(
+  String.raw`\[STEP(?::\s*${NUM_LIST})?(?:\s*:\s*(click))?\s*\]`,
+  "i",
+);
 const DONE = /\[DONE\]/i;
 const WORK = /\[WORK:\s*([^\]\n]+?)\s*\]/i;
+/** Marqueur POINT/STEP malformé ([POINT:abc]…) : absorbé en flux, jamais
+ *  affiché ni prononcé. Les regex spécifiques gagnent à indice égal (ordre
+ *  du tableau dans process). */
+const GARBAGE = /\[(?:POINT|STEP)[^\]\n]*\]/i;
 /** Amorces possibles d'un marqueur coupé en fin de chunk (comparées en MAJ). */
 const STARTS = ["[POINT:", "[STEP", "[DONE]", "[WORK:"];
 
@@ -37,8 +59,93 @@ const MAX_STEPS = 8;
 /** Longueur max d'une instruction parlée (coupe au mot). */
 const MAX_STEP_CHARS = 140;
 
-const clampPct = (raw: string): number =>
-  Math.min(100, Math.max(0, Number(raw)));
+/** Boîte couvrant au moins ce % des DEUX dimensions : le modèle encadre
+ *  « tout l'écran » au lieu d'un élément — bruit, pas une cible. (Une barre
+ *  d'outils pleine largeur mais peu haute reste légitime.) */
+const WHOLE_SCREEN_PCT = 85;
+/** Sous ce seuil (une des dimensions), la boîte est un point déguisé :
+ *  centre gardé, taille jetée (cadre par défaut). */
+const DEGENERATE_PCT = 0.4;
+
+interface NormalizedMarker {
+  xPct: number;
+  yPct: number;
+  wPct?: number;
+  hPct?: number;
+  /** Boîte « plein écran » : à ignorer (POINT) ou dégrader (STEP). */
+  wholeScreen: boolean;
+}
+
+/** Convertit la liste de nombres d'un marqueur en centre (+ taille) en % de
+ *  l'écran. Tolérant aux conventions des différents modèles vision :
+ *  % explicite → pourcents ; tout ≤ 1 → fractions 0–1 ; tout ≤ 1000 →
+ *  0–1000 (grounding natif qwen) ; au-delà → pixels de l'image envoyée.
+ *  Retourne null si inexploitable (rien ne doit alors s'afficher). */
+function normalizeMarker(
+  list: string,
+  image: { width: number; height: number } | undefined,
+  dbg?: (line: string) => void,
+): NormalizedMarker | null {
+  const parts = list.split(",").map((p) => p.trim());
+  const hasPercent = parts.some((p) => p.endsWith("%"));
+  const values = parts.map((p) => Number(p.replace(/\s*%$/, "")));
+  if (values.length < 2 || values.some((v) => !Number.isFinite(v))) {
+    dbg?.(`marqueur inexploitable: ${list}`);
+    return null;
+  }
+  let branch: string;
+  let toPct: (v: number, axis: "x" | "y") => number;
+  if (hasPercent) {
+    branch = "pourcents";
+    toPct = (v) => v;
+  } else if (values.every((v) => v <= 1)) {
+    branch = "fractions 0-1";
+    toPct = (v) => v * 100;
+  } else if (values.every((v) => v <= 1000)) {
+    branch = "0-1000";
+    toPct = (v) => v / 10;
+  } else if (image) {
+    branch = "pixels image";
+    toPct = (v, axis) =>
+      (v / (axis === "x" ? image.width : image.height)) * 100;
+  } else {
+    dbg?.(`marqueur en pixels sans dimensions d'image: ${list}`);
+    return null;
+  }
+  const clamp = (v: number) => Math.min(100, Math.max(0, v));
+  // Indices pairs = x, impairs = y (x,y ou x1,y1,x2,y2).
+  const pct = values.map((v, i) => clamp(toPct(v, i % 2 === 0 ? "x" : "y")));
+  if (pct.length < 4) {
+    if (pct.length === 3) dbg?.(`marqueur à 3 nombres, 3e ignoré: ${list}`);
+    const out: NormalizedMarker = {
+      xPct: pct[0] as number,
+      yPct: pct[1] as number,
+      wholeScreen: false,
+    };
+    dbg?.(`marqueur ${list} → ${branch}, centre ${out.xPct.toFixed(1)},${out.yPct.toFixed(1)}%`);
+    return out;
+  }
+  // Boîte englobante : réordonner (le modèle peut inverser les coins).
+  const x1 = Math.min(pct[0] as number, pct[2] as number);
+  const x2 = Math.max(pct[0] as number, pct[2] as number);
+  const y1 = Math.min(pct[1] as number, pct[3] as number);
+  const y2 = Math.max(pct[1] as number, pct[3] as number);
+  const wPct = x2 - x1;
+  const hPct = y2 - y1;
+  const out: NormalizedMarker = {
+    xPct: (x1 + x2) / 2,
+    yPct: (y1 + y2) / 2,
+    wholeScreen: wPct >= WHOLE_SCREEN_PCT && hPct >= WHOLE_SCREEN_PCT,
+  };
+  if (!out.wholeScreen && wPct >= DEGENERATE_PCT && hPct >= DEGENERATE_PCT) {
+    out.wPct = wPct;
+    out.hPct = hPct;
+  }
+  dbg?.(
+    `marqueur ${list} → ${branch}, boîte ${wPct.toFixed(1)}×${hPct.toFixed(1)}% @ ${out.xPct.toFixed(1)},${out.yPct.toFixed(1)}%${out.wholeScreen ? " (plein écran)" : ""}`,
+  );
+  return out;
+}
 
 /** Nettoie une instruction : retours ligne, ornements de liste, longueur. */
 function cleanInstruction(raw: string): string {
@@ -65,10 +172,19 @@ export interface AnswerParser {
   work(): string | null;
 }
 
-export function createAnswerParser(handlers: {
-  onText(text: string): void;
-  onPoint(point: PointEvent): void;
-}): AnswerParser {
+export function createAnswerParser(
+  handlers: {
+    onText(text: string): void;
+    onPoint(point: PointEvent): void;
+  },
+  opts?: {
+    /** Dimensions de l'image envoyée au modèle (repli pixels absolus). */
+    imageSize?: { width: number; height: number };
+    /** Ligne de diagnostic (SUNFLOWER_DEBUG) — jamais montrée/parlée. */
+    debug?: (line: string) => void;
+  },
+): AnswerParser {
+  const dbg = opts?.debug;
   let buffer = "";
   let pointFired = false;
   let mode: "intro" | "steps" | "outro" = "intro";
@@ -108,7 +224,8 @@ export function createAnswerParser(handlers: {
       const step = STEP.exec(buffer);
       const done = DONE.exec(buffer);
       const work = WORK.exec(buffer);
-      const matches = [point, step, done, work].filter(
+      const garbage = GARBAGE.exec(buffer);
+      const matches = [point, step, done, work, garbage].filter(
         (m): m is RegExpExecArray => m !== null,
       );
       if (matches.length === 0) break;
@@ -116,13 +233,23 @@ export function createAnswerParser(handlers: {
       emitUpTo(first.index);
       buffer = buffer.slice(first[0].length);
       if (first === point) {
-        // Legacy : un seul POINT, uniquement hors plan (ignoré sinon).
+        // Un seul POINT, uniquement hors plan (ignoré sinon).
         if (mode === "intro" && !pointFired) {
-          pointFired = true;
-          handlers.onPoint({
-            xPct: clampPct(first[1] as string),
-            yPct: clampPct(first[2] as string),
-          });
+          const n = normalizeMarker(first[1] as string, opts?.imageSize, dbg);
+          if (n === null || n.wholeScreen) {
+            // Marqueur inexploitable ou « plein écran » : rien n'est montré,
+            // et un POINT valide ultérieur garde sa chance (pointFired non
+            // consommé) — mieux qu'un cadre absurde au milieu de l'écran.
+            dbg?.(`POINT ignoré: ${first[0]}`);
+          } else {
+            pointFired = true;
+            const ev: PointEvent = { xPct: n.xPct, yPct: n.yPct };
+            if (n.wPct !== undefined && n.hPct !== undefined) {
+              ev.wPct = n.wPct;
+              ev.hPct = n.hPct;
+            }
+            handlers.onPoint(ev);
+          }
         } else if (mode === "steps") {
           planRaw += first[0];
         }
@@ -130,14 +257,25 @@ export function createAnswerParser(handlers: {
         closeStep();
         mode = "steps";
         planRaw += first[0];
-        const hasCoords = first[1] !== undefined && first[2] !== undefined;
+        const n =
+          first[1] !== undefined
+            ? normalizeMarker(first[1] as string, opts?.imageSize, dbg)
+            : null;
+        // Coordonnées inexploitables ou « plein écran » : étape dégradée en
+        // avance au clic sans cible (chemin « pas de position » existant) —
+        // surtout pas un repli au centre de l'écran.
+        const hasCoords = n !== null && !n.wholeScreen;
         const next: GuideStep = {
-          advance: !hasCoords || first[3] !== undefined ? "click" : "proximity",
+          advance: !hasCoords || first[2] !== undefined ? "click" : "proximity",
           text: "",
         };
         if (hasCoords) {
-          next.xPct = clampPct(first[1] as string);
-          next.yPct = clampPct(first[2] as string);
+          next.xPct = n.xPct;
+          next.yPct = n.yPct;
+          if (n.wPct !== undefined && n.hPct !== undefined) {
+            next.wPct = n.wPct;
+            next.hPct = n.hPct;
+          }
         }
         steps.push(next);
       } else if (first === work) {
@@ -146,6 +284,10 @@ export function createAnswerParser(handlers: {
           const task = (first[1] ?? "").trim();
           if (task) workTask = task.slice(0, MAX_WORK_CHARS);
         }
+      } else if (first === garbage) {
+        // Marqueur malformé : retiré du flux (ni affiché ni prononcé).
+        dbg?.(`marqueur malformé absorbé: ${first[0]}`);
+        if (mode === "steps") planRaw += first[0];
       } else if (mode === "steps") {
         closeStep();
         planRaw += first[0];
@@ -154,6 +296,19 @@ export function createAnswerParser(handlers: {
       // [DONE] hors plan : simplement retiré du texte.
     }
     if (final) {
+      // Amorce de marqueur jamais fermée (réponse tronquée par num_predict) :
+      // jetée plutôt qu'affichée/prononcée.
+      const open = buffer.lastIndexOf("[");
+      if (open !== -1) {
+        const tail = buffer.slice(open).toUpperCase();
+        if (
+          !tail.includes("]") &&
+          STARTS.some((s) => s.startsWith(tail) || tail.startsWith(s))
+        ) {
+          dbg?.(`amorce tronquée jetée au flush: ${buffer.slice(open)}`);
+          buffer = buffer.slice(0, open);
+        }
+      }
       emitUpTo(buffer.length);
       return;
     }
@@ -205,10 +360,14 @@ export function createAnswerParser(handlers: {
 
 /** Retire tout marqueur résiduel d'un texte complet (défensif). */
 export function stripMarkers(text: string): string {
-  return text
-    .replace(new RegExp(POINT.source, "gi"), "")
-    .replace(new RegExp(STEP.source, "gi"), "")
-    .replace(new RegExp(DONE.source, "gi"), "")
-    .replace(new RegExp(WORK.source, "gi"), "")
-    .trim();
+  return (
+    text
+      .replace(new RegExp(POINT.source, "gi"), "")
+      .replace(new RegExp(STEP.source, "gi"), "")
+      .replace(new RegExp(DONE.source, "gi"), "")
+      .replace(new RegExp(WORK.source, "gi"), "")
+      // Marqueur malformé ([POINT:abc]…) : jamais affiché ni prononcé.
+      .replace(/\[(?:POINT|STEP)[^\]\n]*\]/gi, "")
+      .trim()
+  );
 }

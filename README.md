@@ -44,7 +44,7 @@ The app never picks a model — it sends messages and the server decides which O
 
 `apps/electron` is a second, fully local implementation of the companion, built from the Claude Design prototype in `app-electron-avec-tournesol-local/`. Unlike the Swift app + Worker pair, it needs **no server, no Clerk, no API keys**: push-to-talk (hold ⌃ ⌥) → mic capture → **local Whisper** transcription (whisper.cpp, Metal) → screenshot → **local Ollama** vision model → streamed answer in a speech bubble next to a pixel-art sunflower that follows your cursor, spoken aloud with the macOS system voice. English UI, in the app's black-and-yellow theme.
 
-Surfaces: a status island under the menu-bar notch, the cursor-following sunflower companion with its speech bubble, an orange pointing overlay (the model can highlight one on-screen element), a menu-bar tray panel (live permissions, model status, quit), and a 3-step onboarding on first launch.
+Surfaces: a status island under the menu-bar notch, the cursor-following sunflower companion with its speech bubble, an orange pointing overlay that frames the one element the model points at — sized to that element's bounding box (see "Pointing" below), a menu-bar tray panel (live permissions, model status, quit), and a 3-step onboarding on first launch.
 
 ### Screenshots
 
@@ -96,6 +96,12 @@ When launched from a terminal (`npm start` or `sunflower`), sunflower turns it i
 - **Every 10 000 tokens of context, a fresh chat starts automatically.** The Ollama runner survives from one question to the next (`keep_alive` + prompt cache), and with small local vision models that accumulated state degrades answers over a long session — early questions read the screen perfectly, later ones start hallucinating. Sunflower counts the tokens each answer really consumed (as reported by Ollama) and, past 10k, prints `✦ … starting a fresh chat`, unloads the model — discarding all of its state — and preloads it again in the background while you read the answer.
 - **Ctrl+C** interrupts the current answer; at an idle prompt it quits the app. Set `SUNFLOWER_DEBUG=1` for full error details.
 - Without a TTY (packaged app, redirected output) all of this degrades to plain `[sunflower]` log lines — nothing else changes.
+
+### Pointing
+
+When pointing at one element genuinely helps the answer, the model ends it with that element's **bounding box** — `[POINT:x1,y1,x2,y2]`, four integers from 0 to 1000 relative to the screen image, the grounding format `qwen3-vl` is natively trained on — and the orange bracket frame **sizes itself to the element** (constant-thickness pixel-art brackets, padded a little, clamped between 60×48 px and 70 % of the screen, and always fully on-screen). Guide steps carry the same boxes: the frame wraps each step's target and the step advances as soon as the cursor enters the box, not just a fixed radius around its center; the companion parks itself clear of wide frames.
+
+Because small local models don't all speak the same coordinate dialect, the parser normalizes whatever comes back: legacy two-number centers (`[POINT:50%,30%]`, shown with the default fixed frame), percentages, 0–1 fractions, and absolute pixels of the captured image are all accepted. What it refuses to do is guess: a marker it can't parse shows nothing (it used to be mangled into a corner), a box covering essentially the whole screen is discarded as noise instead of being drawn, and the prompt now instructs the model to skip the marker entirely when it isn't sure where the element is — no marker is better than a frame around a button that doesn't exist. `SUNFLOWER_DEBUG=1` logs every marker's raw text, the convention detected, and the final frame rectangle, so a bad pointing is diagnosable after the fact.
 
 ### Dock mode
 

@@ -71,6 +71,13 @@ export interface MicDataPayload {
 
 export type MicErrorCode = "denied" | "failed";
 
+/** Taille intérieure du cadre de crochets (px fenêtre), envoyée avec
+ *  CH.pointShow. Absente : visuel historique par défaut (100×60). */
+export interface PointShowPayload {
+  w?: number;
+  h?: number;
+}
+
 /** Étape de guide annoncée au compagnon (bulle + voix). */
 export interface GuideStepPayload {
   index: number;
@@ -91,7 +98,7 @@ export interface SunflowerBridge {
   onAnswerToken(cb: (text: string) => void): Unsubscribe;
   onAnswerDone(cb: (full: string) => void): Unsubscribe;
   onTtsStop(cb: () => void): Unsubscribe;
-  onPointShow(cb: () => void): Unsubscribe;
+  onPointShow(cb: (p?: PointShowPayload) => void): Unsubscribe;
   onGuideStep(cb: (p: GuideStepPayload) => void): Unsubscribe;
   onPanelData(cb: (d: PanelData) => void): Unsubscribe;
   onFlip(cb: (side: "left" | "right") => void): Unsubscribe;

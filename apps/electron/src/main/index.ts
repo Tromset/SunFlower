@@ -278,8 +278,12 @@ async function main(): Promise<void> {
   // Exécuteur de guides : purement géométrique, aucun appel IA par étape.
   const guideRunner = createGuideRunner({
     cursor: () => screen.getCursorScreenPoint(),
-    showPoint: (xPct, yPct, bounds) => {
-      if (pointer) showPointerAt(pointer, xPct, yPct, bounds, { sticky: true });
+    showPoint: (target, bounds) => {
+      if (!pointer) return;
+      const rect = showPointerAt(pointer, target, bounds, { sticky: true });
+      tui.debug(
+        `guide pointer ${JSON.stringify(target)} → ${rect.x},${rect.y} ${rect.width}×${rect.height}`,
+      );
     },
     hidePoint: () => {
       if (pointer) hidePointer(pointer);
@@ -335,8 +339,13 @@ async function main(): Promise<void> {
     ttsStop: () => sendTo(companion, CH.ttsStop),
     onQuestion: (q, source) => tui.question(q, source),
     onSessionError: (ctx, err) => tui.sessionError(ctx, err),
+    onPointerDebug: (line) => tui.debug(line),
     showPoint: (point, display) => {
-      if (pointer) showPointerAt(pointer, point.xPct, point.yPct, display.bounds);
+      if (!pointer) return;
+      const rect = showPointerAt(pointer, point, display.bounds);
+      tui.debug(
+        `pointer ${JSON.stringify(point)} → ${rect.x},${rect.y} ${rect.width}×${rect.height}`,
+      );
     },
     hidePoint: () => {
       if (pointer) hidePointer(pointer);

@@ -54,6 +54,8 @@ export interface Tui {
   guideStep(index: number, total: number, text: string): void;
   /** Détail d'erreur — visible seulement avec SUNFLOWER_DEBUG=1. */
   sessionError(context: string, err: unknown): void;
+  /** Ligne de diagnostic — visible seulement avec SUNFLOWER_DEBUG=1. */
+  debug(line: string): void;
   /** Ligne libre, écrite proprement au-dessus du prompt/spinner. */
   log(line: string): void;
   /** Démarre le prompt de saisie (no-op sans TTY). */
@@ -385,6 +387,12 @@ export function createTui(streams?: {
     writeLine(dim(`[debug] ${context}: ${detail}`));
   };
 
+  const debugLine = (line: string) => {
+    // Diagnostic (pointage, normalisation des marqueurs…), sur demande.
+    if (!debug) return;
+    writeLine(dim(`[debug] ${line}`));
+  };
+
   // ---- REPL ------------------------------------------------------------
   const startRepl = (h: ReplHandlers) => {
     if (disposed || rl) return;
@@ -447,6 +455,7 @@ export function createTui(streams?: {
     contextReset,
     guideStep,
     sessionError,
+    debug: debugLine,
     log: (line: string) => writeLine(line),
     startRepl,
     dispose,

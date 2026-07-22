@@ -25,6 +25,10 @@ export function createOverlayWindow(opts: {
    *  souvent masquées (pointer) : Chromium ralentit alors leurs timers quand
    *  elles sont cachées au lieu de brûler du CPU en fond. */
   backgroundThrottling?: boolean;
+  /** Rare : superposition redimensionnée par programme (le pointer, dont le
+   *  cadre suit la taille de l'élément visé). Fenêtre traversée par la souris,
+   *  donc aucun redimensionnement utilisateur possible malgré tout. */
+  resizable?: boolean;
 }): BrowserWindow {
   const win = new BrowserWindow({
     width: opts.width,
@@ -32,7 +36,7 @@ export function createOverlayWindow(opts: {
     show: false,
     transparent: true,
     frame: false,
-    resizable: false,
+    resizable: opts.resizable ?? false,
     movable: false,
     focusable: opts.focusable ?? false,
     skipTaskbar: true,

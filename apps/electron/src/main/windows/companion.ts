@@ -35,8 +35,9 @@ export async function createCompanionWindow(): Promise<BrowserWindow> {
   return win;
 }
 
-/** Écart entre la cible d'un guide et le bord du bloc tournesol : le
- *  tournesol se gare juste à l'extérieur des crochets (POINTER_W / 2 = 70). */
+/** Écart minimal entre la cible d'un guide et le bord du bloc tournesol :
+ *  juste à l'extérieur du cadre par défaut (POINTER_W / 2 = 70). Un cadre
+ *  adaptatif plus large pousse cet écart via `clearance` (voir flyTo). */
 const PARK_GAP = 78;
 /** Centre verticalement le bloc tournesol (70 px) sur la cible. */
 const PARK_DY = -35;
@@ -50,8 +51,10 @@ export interface CompanionController {
   follow(): void;
   /** Gel sur place (étape de guide sans cible). */
   hold(): void;
-  /** Vole se garer à côté d'une cible (coordonnées écran globales). */
-  flyTo(target: { x: number; y: number }): void;
+  /** Vole se garer à côté d'une cible (coordonnées écran globales).
+   *  `clearance` : demi-largeur du cadre de pointage adaptatif — le garage
+   *  s'écarte d'autant pour ne jamais atterrir sur les crochets. */
+  flyTo(target: { x: number; y: number; clearance?: number }): void;
   /** Docké : badge en bas à droite, boucle de suivi entièrement arrêtée. */
   setDocked(docked: boolean): void;
   dispose(): void;
@@ -225,14 +228,13 @@ export function createCompanionController(
       // le pointer continue de montrer la cible, le badge reste au coin.
       if (docked) return;
       const area = screen.getDisplayNearestPoint(target).workArea;
-      // Garage symétrique : le bord du bloc tournesol à PARK_GAP de la cible.
-      const fitsRight =
-        target.x + PARK_GAP + COMPANION_W <= area.x + area.width;
+      // Garage symétrique : le bord du bloc tournesol à `gap` de la cible —
+      // PARK_GAP au minimum, poussé par la demi-largeur d'un cadre adaptatif.
+      const gap = Math.max(PARK_GAP, Math.ceil(target.clearance ?? 0));
+      const fitsRight = target.x + gap + COMPANION_W <= area.x + area.width;
       setSide(fitsRight ? "right" : "left");
       const x =
-        side === "right"
-          ? target.x + PARK_GAP
-          : target.x - PARK_GAP - COMPANION_W;
+        side === "right" ? target.x + gap : target.x - gap - COMPANION_W;
       const y = Math.min(
         Math.max(target.y + PARK_DY, area.y),
         area.y + area.height - COMPANION_H,
