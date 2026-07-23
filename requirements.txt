@@ -1,0 +1,7 @@
+Eleven Labs API key : [Your API key]
+
+Anthropic API key : [Your API key]
+
+Wispr Flow API key : [Your API key]
+
+Completely optional, it just soften the global experience tho it breaks the point of fully local AI assistant
