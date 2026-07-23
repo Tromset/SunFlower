@@ -88,7 +88,7 @@ The repo root carries a `requirements.txt`: the Python convention — one declar
 - `sunflower requirements` checks every line and prints what's missing, with the exact fix per line.
 - `sunflower requirements --fix` also installs what it can by itself: `pnpm install`, the esbuild build, pulling the Ollama model (with the same progress bar as `sunflower models --pull`).
 
-It exits 0 when everything required is satisfied, 1 otherwise — usable as a preflight in scripts. Soft requirements (the build, the Whisper model) don't fail the check: sunflower handles those itself on launch.
+It exits 0 when everything required is satisfied, 1 otherwise — usable as a preflight in scripts. Soft requirements (the build, the Whisper model) don't fail the check: sunflower handles those itself on launch. Entries declared `optional` (the cloud API keys — Eleven Labs, Anthropic, Wispr Flow — which soften the experience but break the fully-local point) are checked against their environment variables (`ELEVENLABS_API_KEY`, …) and never fail the check when unset.
 
 Requirements: [Ollama](https://ollama.com) running (`ollama serve`) with a **vision-capable** model pulled. The default is `qwen3-vl:8b`; if it's absent, sunflower automatically uses the first local model with the `vision` capability. The Whisper model (`ggml-small-q5_1`, ~190 MB) downloads once on first launch into `~/Library/Application Support/sunflower/models/`.
 

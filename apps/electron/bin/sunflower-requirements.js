@@ -114,6 +114,9 @@ const DEFAULT_ENTRIES = [
   ["ollama", "reachable"],
   ["ollama-model", "vision"],
   ["whisper-model", "auto"],
+  ["elevenlabs-api-key", "optional"],
+  ["anthropic-api-key", "optional"],
+  ["wispr-flow-api-key", "optional"],
 ];
 
 function loadRequirements() {
@@ -325,6 +328,18 @@ function fmtBytes(n) {
   return `${(n / 1e3).toFixed(0)} KB`;
 }
 
+/** Entrée « nom: optional » (clés API cloud…) : vérification douce de la
+ *  variable d'environnement NOM_EN_MAJUSCULES — jamais bloquante, ces clés
+ *  adoucissent l'expérience mais cassent le « 100 % local ». */
+function checkOptional(name) {
+  const envVar = name.toUpperCase().replace(/-/g, "_");
+  const set =
+    typeof process.env[envVar] === "string" && process.env[envVar].trim() !== "";
+  return set
+    ? { status: "ok", detail: `set (env ${envVar})` }
+    : { status: "soft", detail: `not set — optional (env ${envVar})` };
+}
+
 function checkWhisperModel(spec) {
   const file = spec === "auto" ? whisperModelFile() : spec;
   const abs = path.join(userDataDir(), "models", file);
@@ -345,7 +360,8 @@ async function runChecks(entries) {
   const results = [];
   for (const [name, spec] of entries) {
     let r;
-    if (name === "node") r = checkNode(spec);
+    if (spec === "optional") r = checkOptional(name);
+    else if (name === "node") r = checkNode(spec);
     else if (name === "pnpm") r = checkPnpm();
     else if (name === "node-deps") r = checkNodeDeps();
     else if (name === "build") r = checkBuild();
