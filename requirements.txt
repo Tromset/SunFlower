@@ -16,11 +16,12 @@
 # ollama: reachable
 # ollama-model: vision
 # whisper-model: auto
-=======
-Eleven Labs API key : [Your API key]
-
-Anthropic API key : [Your API key]
-
-Wispr Flow API key : [Your API key]
-
-Completely optional, it just soften the global experience tho it breaks the point of fully local AI assistant
+##
+## Optional — cloud API keys. Completely optional: they soften the global
+## experience, though they break the point of a fully local AI assistant.
+## Set them as environment variables (ELEVENLABS_API_KEY, ANTHROPIC_API_KEY,
+## WISPR_FLOW_API_KEY); an unset optional entry never fails the check.
+##
+# elevenlabs-api-key: optional
+# anthropic-api-key: optional
+# wispr-flow-api-key: optional

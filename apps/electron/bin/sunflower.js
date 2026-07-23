@@ -5,11 +5,17 @@ const { spawn, spawnSync } = require("node:child_process");
 const { existsSync } = require("node:fs");
 const path = require("node:path");
 
-// `sunflower models [...]` : sous-commande autonome, zéro build/Electron requis.
-if (process.argv[2] === "models") {
+// `sunflower models` / `sunflower requirements` : sous-commandes autonomes,
+// zéro build/Electron requis.
+const SUBCOMMANDS = {
+  models: "sunflower-models.js",
+  requirements: "sunflower-requirements.js",
+};
+const sub = SUBCOMMANDS[process.argv[2]];
+if (sub) {
   const child = spawn(
     process.execPath,
-    [path.join(__dirname, "sunflower-models.js"), ...process.argv.slice(3)],
+    [path.join(__dirname, sub), ...process.argv.slice(3)],
     { stdio: "inherit" },
   );
   child.on("exit", (code) => process.exit(code ?? 0));
@@ -23,14 +29,42 @@ const { spawnQuiet } = require(
   path.join(appRoot, "scripts", "native-log-filter.cjs"),
 );
 
-let electronBin;
-try {
-  electronBin = require(require.resolve("electron", { paths: [appRoot] }));
-} catch {
-  console.error(
-    "sunflower: electron not found — run `pnpm install` at the repo root first.",
-  );
-  process.exit(1);
+const resolveElectron = () => {
+  try {
+    return require(require.resolve("electron", { paths: [appRoot] }));
+  } catch {
+    return null;
+  }
+};
+
+let electronBin = resolveElectron();
+if (!electronBin) {
+  // requirements.txt en action : depuis un clone frais, le binaire global
+  // installe lui-même les dépendances au lieu d'exiger un pnpm install manuel.
+  console.error("sunflower: dependencies missing — running pnpm install …");
+  // Racine du projet global (pnpm-workspace.yaml) en remontant depuis
+  // apps/electron ; même logique que bin/sunflower-requirements.js.
+  let workspaceRoot = appRoot;
+  for (let dir = appRoot, i = 0; i < 4; i++) {
+    if (existsSync(path.join(dir, "pnpm-workspace.yaml"))) {
+      workspaceRoot = dir;
+      break;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  const install = spawnSync("pnpm", ["install"], {
+    cwd: workspaceRoot,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  });
+  if (install.error || install.status !== 0 || !(electronBin = resolveElectron())) {
+    console.error(
+      "sunflower: electron still not found — run `sunflower requirements --fix` for a full check.",
+    );
+    process.exit(1);
+  }
 }
 
 // dist/.build-ok is only written at the very end of a build: a partial build

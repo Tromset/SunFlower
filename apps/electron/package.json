@@ -6,7 +6,8 @@
   "main": "dist/main/index.cjs",
   "bin": {
     "sunflower": "bin/sunflower.js",
-    "sunflower-models": "bin/sunflower-models.js"
+    "sunflower-models": "bin/sunflower-models.js",
+    "sunflower-requirements": "bin/sunflower-requirements.js"
   },
   "scripts": {
     "start": "node scripts/build.mjs && node bin/sunflower.js",
