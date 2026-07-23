@@ -1,3 +1,22 @@
+## sunflower — requirements.txt for the global project.
+##
+## This is not a Python project: every entry below is deliberately a comment,
+## so a stray `pip install -r requirements.txt` installs nothing instead of
+## grabbing random PyPI packages. The `# name: value` lines are the machine-
+## readable part — `sunflower requirements` parses them, checks each one, and
+## `sunflower requirements --fix` installs whatever it can by itself.
+##
+##   check everything:      sunflower requirements
+##   install what it can:   sunflower requirements --fix
+##
+# node: >=18
+# pnpm: any
+# node-deps: installed
+# build: auto
+# ollama: reachable
+# ollama-model: vision
+# whisper-model: auto
+=======
 Eleven Labs API key : [Your API key]
 
 Anthropic API key : [Your API key]
