@@ -79,6 +79,17 @@ npm link
 sunflower           # from anywhere
 ```
 
+The global command is self-sufficient: launched from a fresh clone (no `node_modules` yet), it runs `pnpm install` itself and then builds, instead of erroring with "run `pnpm install` first".
+
+### `requirements.txt` — one file, one command
+
+The repo root carries a `requirements.txt`: the Python convention — one declarative file listing everything the project needs — adapted to the global project. Each `# name: value` line is a requirement (Node ≥ 18, pnpm, installed dependencies, the Electron build, Ollama reachable, a vision-capable model, the Whisper model), and every line is deliberately a `#` comment so a stray `pip install -r requirements.txt` installs nothing instead of grabbing random PyPI packages.
+
+- `sunflower requirements` checks every line and prints what's missing, with the exact fix per line.
+- `sunflower requirements --fix` also installs what it can by itself: `pnpm install`, the esbuild build, pulling the Ollama model (with the same progress bar as `sunflower models --pull`).
+
+It exits 0 when everything required is satisfied, 1 otherwise — usable as a preflight in scripts. Soft requirements (the build, the Whisper model) don't fail the check: sunflower handles those itself on launch.
+
 Requirements: [Ollama](https://ollama.com) running (`ollama serve`) with a **vision-capable** model pulled. The default is `qwen3-vl:8b`; if it's absent, sunflower automatically uses the first local model with the `vision` capability. The Whisper model (`ggml-small-q5_1`, ~190 MB) downloads once on first launch into `~/Library/Application Support/sunflower/models/`.
 
 macOS permissions (requested during onboarding, all grants go to the Electron binary): microphone, accessibility (global ⌃ ⌥ hotkey), screen recording. Config lives in `~/Library/Application Support/sunflower/config.json` (`ollamaHost`, `ollamaModel`, `whisperModel`); `OLLAMA_HOST` env var overrides the host. Sunflower's own windows are excluded from its screenshots via content protection.
