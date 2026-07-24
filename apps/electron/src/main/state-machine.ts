@@ -48,6 +48,25 @@ export interface MachineDeps {
   /** Confie une tâche [WORK:…] au work runner (voir work/runner.ts).
    *  Faux = refusée (un run déjà en cours, garde de présence absente…). */
   workStart(task: string): boolean;
+  /** Double vérification du pointage : simulation invisible (encadrement DOM
+   *  de l'app au premier plan, sinon second passage vision sur un zoom) qui
+   *  corrige les coordonnées AVANT tout affichage. Doit résoudre avec le
+   *  point à montrer — corrigé ou original. Absente : affichage direct. */
+  resolvePoint?(
+    point: PointEvent,
+    shot: Screenshot,
+    question: string,
+    answer: string,
+    signal: AbortSignal,
+  ): Promise<PointEvent>;
+  /** Cale les étapes d'un guide sur le DOM de l'app au premier plan (boîtes
+   *  exactes des éléments visibles) avant l'exécution scriptée. Absente ou en
+   *  échec : plan inchangé. */
+  refineGuide?(
+    guide: ParsedGuide,
+    shot: Screenshot,
+    signal: AbortSignal,
+  ): Promise<ParsedGuide>;
   /** Question prête à partir (affichage terminal). */
   onQuestion?(question: string, source: QuestionSource): void;
   /** Détail d'une erreur de session (diagnostic terminal). */
@@ -162,22 +181,41 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
     phase = "thinking";
     deps.broadcast({ island: "thinking", pose: "thinking" });
     deps.answerReset();
-    abort = new AbortController();
+    const ctrl = new AbortController();
+    abort = ctrl;
+    // Texte déjà streamé de la réponse : contexte de la double vérification
+    // (le second passage doit savoir DE QUOI parlait le pointage).
+    let spoken = "";
+    const showPoint = (point: PointEvent) => {
+      if (id !== seq) return;
+      deps.showPoint(point, shot.display);
+      deps.broadcast({ island: "answering", pose: "pointing" });
+      if (pointPoseTimer) clearTimeout(pointPoseTimer);
+      pointPoseTimer = setTimeout(() => {
+        if (id === seq && phase === "responding") {
+          deps.broadcast({ island: "answering", pose: "answering" });
+        }
+      }, 4000);
+    };
     const parser = createAnswerParser(
       {
         onText: (text) => {
-          if (id === seq) deps.answerToken(text);
+          if (id !== seq) return;
+          spoken += text;
+          deps.answerToken(text);
         },
         onPoint: (point) => {
           if (id !== seq) return;
-          deps.showPoint(point, shot.display);
-          deps.broadcast({ island: "answering", pose: "pointing" });
-          if (pointPoseTimer) clearTimeout(pointPoseTimer);
-          pointPoseTimer = setTimeout(() => {
-            if (id === seq && phase === "responding") {
-              deps.broadcast({ island: "answering", pose: "answering" });
-            }
-          }, 4000);
+          if (!deps.resolvePoint) {
+            showPoint(point);
+            return;
+          }
+          // Fausse simulation : le premier marqueur reste invisible, seul le
+          // point vérifié (ou l'original en repli) est montré.
+          deps.resolvePoint(point, shot, question, spoken, ctrl.signal).then(
+            (p) => showPoint(p),
+            () => showPoint(point),
+          );
         },
       },
       {
@@ -190,7 +228,7 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
       const full = await deps.chat({
         question,
         imageB64: shot.imageB64,
-        signal: abort.signal,
+        signal: ctrl.signal,
         onToken: (text) => {
           if (id !== seq) return;
           if (first) {
@@ -250,9 +288,20 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
       deps.answerDone(stripMarkers(full));
       const guide = parser.guide();
       if (guide) {
-        // Plan complet reçu : exécution scriptée, plus aucun appel IA.
+        // Plan complet reçu : exécution scriptée, plus aucun appel IA entre
+        // les étapes. Juste avant, l'encadrement DOM cale les boîtes des
+        // étapes visibles sur les éléments HTML réels (échec = plan inchangé).
         phase = "guiding";
-        deps.guideStart(guide, shot.display, {
+        let plan = guide;
+        if (deps.refineGuide) {
+          try {
+            plan = await deps.refineGuide(guide, shot, ctrl.signal);
+          } catch {
+            plan = guide;
+          }
+          if (id !== seq) return;
+        }
+        deps.guideStart(plan, shot.display, {
           onStep: (index, total, step, cut) => {
             if (id !== seq) return;
             deps.broadcast({
@@ -269,7 +318,7 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
               phase = "responding";
               deps.broadcast({ island: "answering", pose: "answering" });
               deps.answerReset();
-              const bye = guide.outro ?? "All done.";
+              const bye = plan.outro ?? "All done.";
               deps.answerToken(bye);
               deps.answerDone(bye);
               failsafeTimer = setTimeout(() => {

@@ -257,6 +257,11 @@ export interface ChatOptions {
   onToken: (text: string) => void;
   /** Avancement notable avant le premier token (ex. chargement à froid). */
   onStatus?: (status: ChatStatus) => void;
+  /** Prompt système alternatif (défaut : compagnon d'écran). Utilisé par la
+   *  double vérification du pointage (point-verifier). */
+  system?: string;
+  /** Plafond de génération spécifique (défaut : NUM_PREDICT). */
+  numPredict?: number;
 }
 
 /** Stream la réponse ; résout avec le texte complet (marqueurs inclus). */
@@ -291,9 +296,13 @@ export async function chat(opts: ChatOptions): Promise<string> {
         stream: true,
         think: false,
         keep_alive: KEEP_ALIVE,
-        options: { temperature: 0.4, num_predict: NUM_PREDICT, num_ctx: NUM_CTX },
+        options: {
+          temperature: 0.4,
+          num_predict: opts.numPredict ?? NUM_PREDICT,
+          num_ctx: NUM_CTX,
+        },
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: opts.system ?? SYSTEM_PROMPT },
           {
             role: "user",
             content: opts.question,
