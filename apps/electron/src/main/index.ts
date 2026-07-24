@@ -1,4 +1,11 @@
-import { BrowserWindow, Notification, app, ipcMain, screen } from "electron";
+import {
+  BrowserWindow,
+  Notification,
+  app,
+  ipcMain,
+  nativeImage,
+  screen,
+} from "electron";
 import { CH, type MicDataPayload, type MicErrorCode } from "../shared/ipc";
 import type { PanelData, PermissionId, StatePayload } from "../shared/state";
 import type {
@@ -12,7 +19,9 @@ import {
   type AgentOrbController,
 } from "./windows/agent-orb";
 import { getConfig, setConfig } from "./config-store";
+import { readFrontmostDom } from "./dom-locator";
 import { createGuideRunner } from "./guide-runner";
+import { createPointVerifier } from "./point-verifier";
 import {
   hotkeyAvailable,
   initHotkey,
@@ -313,6 +322,39 @@ async function main(): Promise<void> {
     clicksAvailable: mouseHookAvailable,
   });
 
+  // Double vérification du pointage + encadrement DOM : le premier marqueur
+  // du modèle n'est qu'une simulation invisible — l'app regarde d'abord quelle
+  // application est au premier plan et lit son HTML pour caler le cadre sur
+  // l'élément réel ; sinon un second passage vision corrige les coordonnées
+  // sur un zoom (voir point-verifier.ts et dom-locator.ts).
+  // SUNFLOWER_NO_DOUBLE_CHECK=1 restaure l'affichage direct du premier marqueur.
+  const pointVerifier =
+    process.env["SUNFLOWER_NO_DOUBLE_CHECK"] === "1"
+      ? null
+      : createPointVerifier({
+          // En mode SUNFLOWER_FAKE_ANSWER (dev sans Ollama), pas de second
+          // passage vision — l'encadrement DOM, lui, reste actif.
+          chat: process.env["SUNFLOWER_FAKE_ANSWER"]
+            ? null
+            : (opts) => chat(opts),
+          readDom: readFrontmostDom,
+          crop: (imageB64, rect) => {
+            const img = nativeImage.createFromBuffer(
+              Buffer.from(imageB64, "base64"),
+            );
+            if (img.isEmpty()) return null;
+            const cropped = img.crop(rect);
+            if (cropped.isEmpty()) return null;
+            const size = cropped.getSize();
+            return {
+              b64: cropped.toJPEG(90).toString("base64"),
+              width: size.width,
+              height: size.height,
+            };
+          },
+          debug: (line) => tui.debug(line),
+        });
+
   // Dernier état ambiant d'un run de travail : ré-émis quand la session
   // vocale retombe au repos pour que la phase « waiting for you to step
   // away… » (diffusée pendant que la machine est occupée) reste visible.
@@ -368,6 +410,13 @@ async function main(): Promise<void> {
     hidePoint: () => {
       if (pointer) hidePointer(pointer);
     },
+    // Sans this : passage direct des méthodes du vérificateur (closure).
+    ...(pointVerifier
+      ? {
+          resolvePoint: pointVerifier.verifyPoint,
+          refineGuide: pointVerifier.refineGuide,
+        }
+      : {}),
     guideStart: (guide, display, cb) => guideRunner.start(guide, display, cb),
     guideCancel: () => guideRunner.cancel(),
     guideStep: (payload) => {

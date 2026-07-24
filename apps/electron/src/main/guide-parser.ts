@@ -67,13 +67,26 @@ const WHOLE_SCREEN_PCT = 85;
  *  centre gardé, taille jetée (cadre par défaut). */
 const DEGENERATE_PCT = 0.4;
 
-interface NormalizedMarker {
+export interface NormalizedMarker {
   xPct: number;
   yPct: number;
   wPct?: number;
   hPct?: number;
   /** Boîte « plein écran » : à ignorer (POINT) ou dégrader (STEP). */
   wholeScreen: boolean;
+}
+
+/** Premier marqueur [POINT:…] d'un texte COMPLET, normalisé relativement à
+ *  `image`. Second passage du point-verifier : la réponse attendue est un
+ *  marqueur seul, pas un flux — le parseur incrémental serait surdimensionné. */
+export function parsePointMarker(
+  text: string,
+  image: { width: number; height: number } | undefined,
+  dbg?: (line: string) => void,
+): NormalizedMarker | null {
+  const m = POINT.exec(text);
+  if (!m) return null;
+  return normalizeMarker(m[1] as string, image, dbg);
 }
 
 /** Convertit la liste de nombres d'un marqueur en centre (+ taille) en % de
