@@ -93,6 +93,10 @@ export interface SessionMachine {
 const MIN_HOLD_MS = 300;
 const ERROR_MS = 2600;
 const TTS_FAILSAFE_MS = 90_000;
+// Miroir local de POINTER_MS (windows/pointer.ts) : durée d'affichage d'un cadre
+// non-collant avant auto-masquage. Dupliqué à dessein — state-machine.ts reste
+// sans dépendance Electron (pointer.ts importe electron). Garder synchronisé.
+const POINTER_LIVE_MS = 4000;
 
 export function createSessionMachine(deps: MachineDeps): SessionMachine {
   let phase: AppPhase = "idle";
@@ -106,12 +110,17 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
   let failsafeTimer: NodeJS.Timeout | null = null;
   let pointPoseTimer: NodeJS.Timeout | null = null;
   let micTimer: NodeJS.Timeout | null = null;
+  /** Un cadre de pointage est-il affiché pour le tour courant ? Gate du
+   *  raffinement : une correction qui résout après l'auto-masquage ne doit PAS
+   *  faire resurgir un cadre. */
+  let pointerLive = false;
 
   const clearTimers = () => {
     for (const t of [errorTimer, failsafeTimer, pointPoseTimer, micTimer]) {
       if (t) clearTimeout(t);
     }
     errorTimer = failsafeTimer = pointPoseTimer = micTimer = null;
+    pointerLive = false;
   };
 
   const toIdle = () => {
@@ -190,12 +199,16 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
       if (id !== seq) return;
       deps.showPoint(point, shot.display);
       deps.broadcast({ island: "answering", pose: "pointing" });
+      pointerLive = true;
       if (pointPoseTimer) clearTimeout(pointPoseTimer);
       pointPoseTimer = setTimeout(() => {
+        // Fenêtre visible finie : le cadre s'est auto-masqué (miroir de
+        // pointer.ts) — plus aucun raffinement ne doit le redessiner.
+        pointerLive = false;
         if (id === seq && phase === "responding") {
           deps.broadcast({ island: "answering", pose: "answering" });
         }
-      }, 4000);
+      }, POINTER_LIVE_MS);
     };
     const parser = createAnswerParser(
       {
@@ -206,15 +219,25 @@ export function createSessionMachine(deps: MachineDeps): SessionMachine {
         },
         onPoint: (point) => {
           if (id !== seq) return;
-          if (!deps.resolvePoint) {
-            showPoint(point);
-            return;
-          }
-          // Fausse simulation : le premier marqueur reste invisible, seul le
-          // point vérifié (ou l'original en repli) est montré.
+          // Affichage optimiste : la boîte du modèle (déjà normalisée/saine) est
+          // montrée TOUT DE SUITE — l'encadrement redevient instantané et fiable,
+          // sans attendre la chaîne asynchrone (DOM osascript + éventuel second
+          // passage vision). La double vérification ne fait plus que RAFFINER le
+          // cadre en place.
+          showPoint(point);
+          if (!deps.resolvePoint) return;
           deps.resolvePoint(point, shot, question, spoken, ctrl.signal).then(
-            (p) => showPoint(p),
-            () => showPoint(point),
+            (p) => {
+              // Re-dessin UNIQUEMENT si (a) la vérif a réellement corrigé le point
+              // (nouvel objet — contrat de verifyPoint : tout repli renvoie
+              // l'original tel quel), (b) on est toujours sur le même tour, et
+              // (c) le cadre est encore à l'écran. Sans (c), une correction
+              // tardive (queue Ollama) ferait surgir un cadre après l'auto-masquage.
+              if (p !== point && id === seq && pointerLive) showPoint(p);
+            },
+            () => {
+              // verifyPoint ne rejette jamais (replis internes) ; garde par sûreté.
+            },
           );
         },
       },

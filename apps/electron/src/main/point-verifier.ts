@@ -17,10 +17,11 @@ import {
 import type { Screenshot } from "./screenshot";
 import { snapToElement, type DomSnapshot } from "./dom-locator";
 
-/** Budget du second passage vision. Le POINT arrive en fin de réponse : la
- *  requête de vérification ne fait au pire que la queue derrière les derniers
- *  tokens du flux principal — au-delà, le point original part tel quel. */
-const VERIFY_TIMEOUT_MS = 20_000;
+/** Budget du second passage vision. Le cadre est déjà affiché (boîte du modèle)
+ *  quand ce passage tourne : il ne fait plus que RAFFINER un cadre visible. Une
+ *  correction qui résout après l'auto-masquage (~POINTER_MS) est de toute façon
+ *  ignorée par le gate `pointerLive` de la machine — inutile de budgéter au-delà. */
+const VERIFY_TIMEOUT_MS = 6_000;
 /** Le crop envoyé au second passage : boîte annoncée × ce facteur… */
 const CROP_EXPAND = 3;
 /** …au moins cette fraction de l'écran (assez de contexte pour reconnaître
